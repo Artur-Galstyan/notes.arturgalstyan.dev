@@ -1,6 +1,7 @@
 ---
 import "./src/styles/global.css";
 import Navbar from "../components/Navbar.astro";
+import Analytics from "@vercel/analytics/astro";
 ---
 
 <html lang="en" data-theme="light">
@@ -9,6 +10,7 @@ import Navbar from "../components/Navbar.astro";
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
         <meta name="viewport" content="width=device-width" />
         <meta name="generator" content={Astro.generator} />
+        <Analytics />
     </head>
     <body class="bg-base-100 text-base-content">
         <div class="container mx-auto px-4 py-8">
