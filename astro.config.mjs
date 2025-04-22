@@ -4,7 +4,7 @@ import { defineConfig } from "astro/config";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import tailwindcss from "@tailwindcss/vite";
-import vercel from "@astrojs/vercel/serverless";
+import vercel from "@astrojs/vercel";
 
 // https://astro.build/config
 export default defineConfig({
@@ -21,7 +21,7 @@ export default defineConfig({
   output: "server",
   adapter: vercel({
     webAnalytics: {
-      enabled: true, // set to false when using @vercel/analytics@1.4.0
+      enabled: true,
     },
   }),
 });
