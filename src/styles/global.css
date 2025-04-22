@@ -1,0 +1,24 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+@plugin "daisyui";
+
+body {
+    font-family: "Fira Mono", monospace;
+}
+
+article > p {
+    @apply text-justify;
+}
+
+article > h1,
+h2,
+h3 {
+    @apply text-center;
+}
+
+pre {
+    @apply w-full overflow-x-scroll;
+}
+code {
+    @apply w-full overflow-x-scroll;
+}

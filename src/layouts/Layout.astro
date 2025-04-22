@@ -1,0 +1,21 @@
+---
+import "./src/styles/global.css";
+import Navbar from "../components/Navbar.astro";
+---
+
+<html lang="en" data-theme="light">
+    <head>
+        <meta charset="utf-8" />
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+        <meta name="viewport" content="width=device-width" />
+        <meta name="generator" content={Astro.generator} />
+    </head>
+    <body class="bg-base-100 text-base-content">
+        <div class="container mx-auto px-4 py-8">
+            <Navbar />
+        </div>
+        <div class="container mx-auto w-2/3">
+            <slot />
+        </div>
+    </body>
+</html>

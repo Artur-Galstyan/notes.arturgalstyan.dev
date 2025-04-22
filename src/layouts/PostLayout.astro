@@ -1,0 +1,31 @@
+---
+import Navbar from "../components/Navbar.astro";
+import "../styles/global.css";
+const { title } = Astro.props;
+---
+
+<html lang="en" data-theme="light">
+    <head>
+        <meta charset="utf-8" />
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+        <meta name="viewport" content="width=device-width" />
+        <meta name="generator" content={Astro.generator} />
+        <title>{title}</title>
+        <link
+            rel="stylesheet"
+            href="https://cdn.jsdelivr.net/npm/katex@0.15.2/dist/katex.min.css"
+        />
+    </head>
+
+    <body class="bg-base-100 text-base-content">
+        <div class="container mx-auto px-4 py-8">
+            <Navbar />
+        </div>
+        <div class="flex justify-center">
+            <article class="prose w-full">
+                <slot />
+            </article>
+        </div>
+        <div class="h-[25rem]"></div>
+    </body>
+</html>
