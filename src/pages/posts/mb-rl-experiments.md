@@ -71,3 +71,51 @@ The above function is simple: just create `n_episode` worth of data using epsilo
 In the `else` branch, we have to specify _how_ we should - in general - choose actions based on our model. I alluded to this earlier, namely that we need to plan ahead. Following the [talk from Sergey Levine](https://www.youtube.com/watch?v=VxyhEK4yW5g), you could use the cross-entropy method (CEM), which is a gradient-free planning method, although there are certainly other methods as well, such as Monte-Carlo Tree Search (MCTS). We will use CEM for now and later use MCTS to see the difference.
 
 ## Excursion: Cross-Entropy Method
+
+CEM is a planning algorithm with the goal to give us the best action to take at the current state. It's an iterative process, starting with a uniform distribution of actions and then morphing that into the best possible action probabilities (hence the name _cross-entropy_ - you are trying to minimise the difference between a uniform distrubtion and the best distribution).
+
+We need to give the algorithm also `n_horizon` which refers to how many steps into the future you should plan ahead. One of the problems with MBRL is compounding errors - namely the future ahead you plan, the more the small errors from your dynamics model pile up, eventually given a prediction which could be far away from the truth (software developers have the same problem - rarely have plans for a projects worked and yet we throw shade at MBRL algorithms for not being able to plan ahead...).
+
+```python
+@eqx.filter_jit
+def reward_model_planning(
+    dynamics_model: DynamicsModel,
+    reward_model: RewardModel,
+    initial_state: Array,
+    n_horizon: int = 10,
+    n_samples: int = 100,
+    n_iterations: int = 5,
+    n_elite: int = 10,
+    n_actions: int = 2,
+):
+```
+
+Wait, what the hell is this `RewardModel` - you might be asking, rightfully so since I haven't introduced that yet.
+
+We are trying to plan ahead into the future and evaluate each trajectory. But how good is the trajectory?
+
+![Cross-Entropy Method for planning in Model-Based RL](/cem1.png)
+
+Our dynamics model can predict the next state, but it can't predict the next reward. What makes this situation even more difficult is that in our environment (i.e. CartPole) the reward is always $1$. So, our reward model looks like this:
+
+```python
+class RewardModel(eqx.Module):
+    mlp: eqx.nn.MLP
+
+    n_dims: int = eqx.field(static=True)
+    n_actions: int = eqx.field(static=True)
+
+    def __init__(self, n_dims: int, n_actions: int, key: PRNGKeyArray):
+        self.mlp = eqx.nn.MLP(
+            in_size=n_dims + n_actions, out_size=1, width_size=128, depth=3, key=key
+        )
+        self.n_dims = n_dims
+        self.n_actions = n_actions
+
+    def __call__(self, x: Float[Array, "n_dims+n_actions"]) -> Float[Array, ""]:
+        return self.mlp(x)
+```
+
+And it takes as input the current state and action and returns a scalar, which is the predicted reward. Later, during training, you will notice that the loss of this reward model quickly drops to 0 so it's actually not all that useful (it's not that hard to predict 1 _every single time_). A much better way to estimate reward for the CartPole environment would be to make it dependent on the angle and velocity of the cart. But hand crafting rewards like this will quickly fall apart and does not scale and is not general enough (what's the ideal reward function for LunarLander?).
+
+But because we have no other option right now, we will use this reward model.
