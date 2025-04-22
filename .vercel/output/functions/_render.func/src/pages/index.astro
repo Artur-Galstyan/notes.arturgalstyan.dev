@@ -1,0 +1,24 @@
+---
+import Layout from "../layouts/Layout.astro";
+const posts = Object.values(import.meta.glob("./posts/*.md", { eager: true }));
+---
+
+<Layout>
+    <ul class="list-disc">
+        {
+            posts.map((post: any) => (
+                <li class="mb-4">
+                    <a
+                        class="text-blue-500 hover:text-blue-700"
+                        href={post.url}
+                    >
+                        {post.frontmatter.title}
+                    </a>{" "}
+                    <span class="text-gray-500">
+                        {new Date(post.frontmatter.date).toLocaleDateString()}
+                    </span>
+                </li>
+            ))
+        }
+    </ul>
+</Layout>
