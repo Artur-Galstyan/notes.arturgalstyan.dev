@@ -511,6 +511,16 @@ Rewards (using a slightly larger dynamics model)
 
 Something definitely changed, namely the reward never dipped below 50, whereas in the previous approach with the reward model, the performance just kept getting worse. But it's not feasible to hand craft the reward model every time. In this example it was just a simple matter of asking Claude if it can just code it out for me, but that won't always be possible.
 
+## Little GIF
+
+What does the dynamics model actually predict? I collected some data for state transitions from the actual environment and what the dynamics model predicts. Have a look at these examples:
+
+
+![Gif1](/posts/mb-rl-experiments/gif1.gif)
+![Gif2](/posts/mb-rl-experiments/gif2.gif)
+
+I have to say I like these predictions. Sure, they are "over the top" and predict a super drastic change in the cart, but it looks like the physics kind of checks out, especially in the second GIF. Look at how if the pole is tilted to the right and if the cart moves to the right, then the pole moves to the left!
+
 ## Conclusion (for now)
 
 This was expected. Sergey said as much in his talk in the linked video that MBRL - in this basic setting - does not work and I have to concur. But the MBRL journey is far from done. For one, we can switch CEM with MCTS to get potentially better results (for reference, AlphaGo used MCTS) but we can also use the other tricks that Sergey and their team have found. We will see about that in the next post.
