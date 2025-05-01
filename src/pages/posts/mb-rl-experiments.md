@@ -524,3 +524,75 @@ I have to say I like these predictions. Sure, they are "over the top" and predic
 ## Conclusion (for now)
 
 This was expected. Sergey said as much in his talk in the linked video that MBRL - in this basic setting - does not work and I have to concur. But the MBRL journey is far from done. For one, we can switch CEM with MCTS to get potentially better results (for reference, AlphaGo used MCTS) but we can also use the other tricks that Sergey and their team have found. We will see about that in the next post.
+
+
+## Errata
+
+Ouch. I just saw that I had a major flaw in my data collection pipeline, which is the entire reason, that the dynamics model got "stuck" and didn't improve any further beyond a loss of around `0.2`.
+
+
+Looking at this code again
+
+
+```python
+def collect_data(
+    env: gym.Env,
+    n_episodes: int,
+    dynamics_model,
+    reward_model,
+    epsilon: float = 0.1,
+    n_horizon: int = 10,
+) -> list[tuple[Array, Array, Array, Array]]:
+    data = []
+    for i in range(n_episodes):
+        state, _ = env.reset()
+
+        terminated, truncated = False, False
+        while not terminated and not truncated:
+            if random.random() < epsilon:
+                action = env.action_space.sample()
+            else:
+                action = int(
+                    reward_model_planning(
+                        dynamics_model, reward_model, state, n_horizon=n_horizon
+                    )
+                )
+            next_state, reward, terminated, truncated, _ = env.step(action)
+            data.append((state, action, reward, next_state))
+    return data
+```
+
+We can see that we predict the action like this
+
+```python
+reward_model_planning(
+    dynamics_model, reward_model, state, n_horizon=n_horizon
+)
+```
+
+But the issue is that `state` is always the initial state! It never gets updated. Furthermore, this line
+
+```python
+data.append((state, action, reward, next_state))
+```
+
+makes everything worse, because `state` is the initial state of the environment and `next_state` keeps changing, so it's a miracle at all that I got some high returns at all. A simple fix for this is:
+
+
+```python
+state = next_state
+```
+
+With that single line added, the MBRL algorithm works and really soars:
+
+
+![Rewards](/posts/mb-rl-experiments/with_hand_crafted_rewards.png)
+
+
+This is using the hand-crafted reward signal. If we run the same code again with the reward model, we can see just how badly it performs:
+
+
+![Rewards](/posts/mb-rl-experiments/with_reward_model_fail.png)
+
+
+This just goes to show how important a good reward signal is during planning. In both cases, the dynamics model learned the model just fine (very low loss), but the planning is what leads to the low returns, because the reward signal is not helpful at all and is not properly guiding the planning step.
