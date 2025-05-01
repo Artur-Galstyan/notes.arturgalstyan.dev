@@ -596,3 +596,126 @@ This is using the hand-crafted reward signal. If we run the same code again with
 
 
 This just goes to show how important a good reward signal is during planning. In both cases, the dynamics model learned the model just fine (very low loss), but the planning is what leads to the low returns, because the reward signal is not helpful at all and is not properly guiding the planning step.
+
+But you can actually remedy this by changing the way you collect the data. For instance if you used this data collection:
+
+
+```python
+def collect_data(
+    env: gym.Env,
+    n_episodes: int,
+    dynamics_model,
+    reward_model,
+    epsilon: float = 0.1,
+    n_horizon: int = 10,
+    gamma: float = 0.99,
+) -> list[tuple[Array, Array, Array, Array, Array]]:
+    data = []
+    for i in range(n_episodes):
+        state, _ = env.reset()
+        episode_data = []
+
+        terminated, truncated = False, False
+        while not terminated and not truncated:
+            if random.random() < epsilon:
+                action = env.action_space.sample()
+            else:
+                action = int(
+                    reward_model_planning(
+                        dynamics_model, reward_model, state, n_horizon=n_horizon
+                    )
+                )
+            next_state, reward, terminated, truncated, _ = env.step(action)
+            episode_data.append((state, action, reward, next_state))
+            state = next_state
+
+        # Calculate returns
+        returns = []
+        G = 0
+        for s, a, r, ns in reversed(episode_data):
+            G = r + gamma * G
+            returns.insert(0, G)
+
+        if returns:
+            max_return = max(returns)
+            min_return = min(returns)
+            # Avoid division by zero
+            if max_return > min_return:
+                normalized_returns = [
+                    (r - min_return) / (max_return - min_return) for r in returns
+                ]
+            else:
+                normalized_returns = [1.0 for _ in returns]
+        else:
+            normalized_returns = []
+
+        for (s, a, r, ns), g in zip(episode_data, normalized_returns):
+            data.append((s, a, r, ns, g))
+
+    return data
+```
+
+Then you would calculate the expected future rewards given a state $s$. This way, you introduce the idea that if the pole is upright in the middle, then this will likely yield higher results in the future. Then, of course, you have to change the training part a bit:
+
+
+```python
+def train_models(
+    data,
+    dynamics_model,
+    reward_model,
+    n_epochs,
+    batch_size,
+    learning_rate,
+    optimizer,
+    dynamics_opt_state,
+    reward_opt_state,
+):
+    states = jnp.array([d[0] for d in data])
+    actions = jnp.array([d[1] for d in data])
+    rewards = jnp.array([d[2] for d in data])
+    next_states = jnp.array([d[3] for d in data])
+    returns = jnp.array([d[4] for d in data])
+
+    actions_onehot = jax.vmap(lambda a: jax.nn.one_hot(a, dynamics_model.n_actions))(
+        actions
+    )
+    inputs = jnp.concatenate([states, actions_onehot], axis=1)
+
+    metrics = LossMetrics.empty()
+
+    for epoch in range(n_epochs):
+        idx = jax.random.permutation(jax.random.PRNGKey(epoch), jnp.arange(len(data)))
+        batches = 0
+
+        for i in range(0, len(data), batch_size):
+            batch_idx = idx[i : i + batch_size]
+            batches += 1
+
+            batch_inputs = inputs[batch_idx]
+            batch_targets = next_states[batch_idx]
+            dynamics_model, dynamics_opt_state, d_loss = step(
+                dynamics_model,
+                batch_inputs,
+                batch_targets,
+                dynamics_opt_state,
+                optimizer,
+            )
+
+            batch_returns = returns[batch_idx]
+            reward_model, reward_opt_state, r_loss = step(
+                reward_model, batch_inputs, batch_returns, reward_opt_state, optimizer
+            ) # train on the returns now!
+
+            metrics = metrics.merge(
+                LossMetrics.single_from_model_output(
+                    dynamic_loss=d_loss, reward_loss=r_loss
+                )
+            )
+
+    return dynamics_model, reward_model, metrics, dynamics_opt_state, reward_opt_state
+```
+
+When you do this instead, the model solves the environment as well:
+
+
+![Rewards](/posts/mb-rl-experiments/with_reward_model_success.png)
