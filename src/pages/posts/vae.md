@@ -49,3 +49,40 @@ Very simple stuff. Ok, but let's say you have trained your AE on MNIST and you g
 One thing you might be thinking is this: if I give my AE an image of a $1$ and I get some vector $z_1$ back and then I encode an image of a $2$ and get another vector $z_2$ back, then what does the middle point between $z_1$ and $z_2$ look like? After all, I can put either vector $z$ into my decoder and get a nice reconstructed image of my original input back. Does this mean that the middle point between the encoded vectors for the image $1$ and $2$ is an image which looks kind of like both $1$ and $2$? If it wasn't numbers but faces, can I give the AE 2 faces, take the middle point and put that through the decoder to get a completely new face back?
 
 The unfortunate truth is: no!
+
+But if we could somehow tidy up the latent space, then yes, we could generate new and authentic looking images. And the way we can tidy the latent space up is by using VAE.
+
+In a VAE, we have 2 spaces: the data space $p(x)$ and the latent space $p(z)$ and we don't really have access to any of those (we only have a bunch of data points sampled from $p(x)$ but that's about it). VAE has a design decision and says that $p(z)$ is normal distributed and this will be very useful later in the loss function derivation.
+
+
+Between these, we have 2 mappings (both also normal distributions) that map one space to the other which are:
+
+$$
+\begin{align*}
+& p(x|z) \qquad \text{(kind of decoder)} \\
+& p(z|x) \qquad \text{(kind of encoder)}
+\end{align*}
+$$
+
+These mappins are like our encoder and decoder: $p(x|z)$ generates (or reconstructs) $x$ from a latent vector $z$ and vice versa.
+
+And we don't really know those either (at least so far).
+
+The decoder we can just learn as a supervised learning task and is by far the easiest part: we have the input $z$ and the target $x$ and all we need to do is to compare the output of the decoder against the input $x$ and we're golden.
+
+But the encoder is a different story, because
+
+$$
+\begin{align*}
+p(z|x) &= \frac{p(x|z)p(z)}{p(x)} \\
+p(x) &= \int p(x|z)p(z)dz
+\end{align*}
+$$
+
+which would mean we would have to integrate over the entire latent space $p(z)$, which is computationally not feasible. So, instead, we will approximate $p(z|x)$ with
+
+$$
+  q(z|x) \approx p(z|x)
+$$
+
+And we do our training correct, then $q(z|x)$ will indeed be a good approximation to the true encoder and $q(z|x)$ will also be a normal distribution. And btw. this means that it will output a $\mu$ and a $\sigma$, which we can use to sample a vector.
