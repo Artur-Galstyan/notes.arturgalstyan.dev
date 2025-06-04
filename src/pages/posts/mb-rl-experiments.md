@@ -717,5 +717,4 @@ def train_models(
 
 When you do this instead, the model solves the environment as well:
 
-
 ![Rewards](/posts/mb-rl-experiments/with_reward_model_success.png)
