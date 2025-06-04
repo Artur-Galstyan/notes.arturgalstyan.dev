@@ -4,7 +4,7 @@ import { defineConfig } from "astro/config";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import tailwindcss from "@tailwindcss/vite";
-import vercel from "@astrojs/vercel";
+import vercelStatic from "@astrojs/vercel/static";
 
 // https://astro.build/config
 export default defineConfig({
@@ -18,9 +18,10 @@ export default defineConfig({
   vite: {
     plugins: [tailwindcss()],
   },
-  adapter: vercel({
+  adapter: vercelStatic({
     webAnalytics: {
       enabled: true,
     },
   }),
+  output: "static",
 });
