@@ -85,4 +85,187 @@ $$
   q(z|x) \approx p(z|x)
 $$
 
-And we do our training correct, then $q(z|x)$ will indeed be a good approximation to the true encoder and $q(z|x)$ will also be a normal distribution. And btw. this means that it will output a $\mu$ and a $\sigma$, which we can use to sample a vector.
+And we do our training correct, then $q(z|x)$ will indeed be a good approximation to the true encoder and $q(z|x)$ will also be a normal distribution. And btw. this means that it will output a $\mu$ and a $\sigma$, which we can use to sample the vector $z$.
+
+## Deriving the Loss Function
+
+Here's the goal: we want to maximise $log p(x)$ for each $x$ in our dataset and if you're asking why, then you're in good company, because that's not immediately obvious. Remember how I said we have 2 distributions and that one of them is $p(x)$ - the data distribution? What $log p(x)$ tells us is the probability that we could sample $x$ from the distribution. But all our data points $x$ ARE from the data distribution, so the probability is $1.0$, because we don't have any datapoints outside of our dataset. So that is our starting point:
+
+$$
+  \text{maximise} \qquad \log p(x)
+$$
+
+The first thing we can say is this:
+
+$$
+  \log p(x) = \log \int p(x|z) dz
+$$
+
+And that means _marginalising_ out $z$. To better understand this, imagine you had 2 die (an $x$-dice and a $z$-dice) and their probabilities are skewed such that higher numbers have higher probabilities. A probability matrix would look like this:
+
+![Probability Matrix](/posts/vae/matrix.png)
+
+The redder areas indicate a higher probability. If you were interested in the probability that $p(x=5)$, then, to calculate that, you need to compute the sum of all the outcomes where $p(x=5, z=any)$ (that's the one I highlighted in the image), so, in other words, it's:
+
+$$
+  p(x=5) = \sum_{i=1}^6 p(x=5, z=i)
+$$
+
+This process is called _marginalization_. It's essentially the same as $\log p(x) = \log \int p(x|z) dz$, except of course there we are dealing with continious values (and the log is there for numerical stability, but doesn't change the probabilities underneath).
+
+We use the "_multiply by one_" trick to introduce a new term:
+$$
+  \begin{align*}
+  \log p(x) &= \log \left( \int p(x|z) dz \right) \\
+   &= \log \left( \int \frac{q(z|x)}{q(z|x)} p(x,z) dz \right)
+ \end{align*}
+$$
+
+Pretty neat, now we introduced our approximation. We can rearrange some stuff to get this:
+
+
+$$
+  \begin{align*}
+  \log p(x) &= \log \left( \int p(x|z) dz \right) \\
+   &= \log \left( \int \frac{q(z|x)}{q(z|x)} p(x,z) dz \right) \\
+   &= \log \left( \int q(z|x) \frac{p(x,z)}{q(z|x)}  dz \right)
+ \end{align*}
+$$
+
+The next trick is a bit unintuitive, but bear with me. Let's say you have two functions:
+
+$$
+  f(z) = z
+$$
+
+and another function which generates the $z$ randomly
+
+$$
+  Q(z)
+$$
+
+Think back to the skewed die from earlier. If $Q(z)$ is the random outcome generator for one of those die, then it will return higher values for $z$ with greater probability than lower ones. So what is the expected value for the function $f(z)$ in this case? It is defined as:
+
+$$
+  \mathbb{E}_{Q(z)} f(z) = \int Q(z) f(z) dz
+$$
+
+Or spoken in plain English: the expected value for the function $f(z)$ is the probability to sample a $z$ times the value of that $z$. For our die example, we could say that we have a 10% change to roll a 1 and a 90% chance to roll a 6 and nothing else. In this case, the expected value for $f(z)$ is
+
+$$
+  \begin{align*}
+    f(z) &= z \\
+    f(1) &= 1 \\
+    f(6) &= 6 \\
+    Q(1) &= 0.1 \\
+    Q(6) &= 0.9 \\
+
+    \mathbb{E} &= Q(1) * f(1) + Q(6) * f(6) \\
+     &= 0.1 * 1 + 0.9 * 6 \\
+     &= 5.5
+  \end{align*}
+$$
+
+We have the same setting in our derivation:
+
+$$
+  \begin{align*}
+  \log p(x) &= \log \left( \int p(x|z) dz \right) \\
+   &= \log \left( \int \frac{q(z|x)}{q(z|x)} p(x,z) dz \right) \\
+   &= \log \left( \int q(z|x) \frac{p(x,z)}{q(z|x)}  dz \right)
+ \end{align*}
+$$
+
+Where $q(z|x)$ is the probability to sample $z$ (this is akin to the Q(z) from the definition earlier) and $\frac{p(x,z)}{q(z|x)}$ is the value function (the f(z) in the example). With that, we can rewrite it like so:
+
+
+$$
+  \begin{align*}
+  \log p(x) &= \log \left( \int p(x|z) dz \right) \\
+   &= \log \left( \int \frac{q(z|x)}{q(z|x)} p(x,z) dz \right) \\
+   &= \log \left( \int q(z|x) \frac{p(x,z)}{q(z|x)}  dz \right) \\
+   &= \log \mathbb{E}_{q(z|x)} \left( \frac{p(x,z)}{q(z|x)} \right)
+ \end{align*}
+$$
+
+The next trick we can use is the Jensen inequality, which states:
+
+$$
+f(E(y)) \ge E(f(y))
+$$
+
+if $f$ is a concave function and since $\log$ is a concave function, we can say
+
+$$
+\log(E(y)) \ge E(\log(y))
+$$
+
+For our derivation, we can now write:
+
+$$
+  \begin{align*}
+  \log p(x) &= \log \left( \int p(x|z) dz \right) \\
+   &= \log \left( \int \frac{q(z|x)}{q(z|x)} p(x,z) dz \right) \\
+   &= \log \left( \int q(z|x) \frac{p(x,z)}{q(z|x)}  dz \right) \\
+   &= \log \mathbb{E}_{q(z|x)} \left( \frac{p(x,z)}{q(z|x)} \right) \\
+   &\ge \mathbb{E}_{q(z|x)} \left( \log \frac{p(x,z)}{q(z|x)} \right)
+ \end{align*}
+$$
+
+This is great, because now if we can - somehow - increase $\mathbb{E}_{q(z|x)} \left( \log \frac{p(x,z)}{q(z|x)} \right)$, then it will automatically raise the bar for $\log p(x)$.
+
+Because $p(x,z) = p(x|z)p(z)$, we can write and rearrange the terms like so:
+
+$$
+  \begin{align*}
+  \log p(x) &= \log \left( \int p(x|z) dz \right) \\
+   &= \log \left( \int \frac{q(z|x)}{q(z|x)} p(x,z) dz \right) \\
+   &= \log \left( \int q(z|x) \frac{p(x,z)}{q(z|x)}  dz \right) \\
+   &= \log \mathbb{E}_{q(z|x)} \left( \frac{p(x,z)}{q(z|x)} \right) \\
+   &\ge \mathbb{E}_{q(z|x)} \left( \log \frac{p(x,z)}{q(z|x)} \right) \\
+   &\ge \mathbb{E}_{q(z|x)} \left( \log \frac{p(x|z)p(z)}{q(z|x)} \right)
+ \end{align*}
+$$
+
+The laws of the logs tell us:
+
+$$
+  \begin{align*}
+    \log(xy) &= \log x + \log y \\
+    \log(x/y) &= \log x - \log y
+  \end{align*}
+$$
+
+And because of that, we can rewrite the term as:
+
+$$
+  \begin{align*}
+  \log p(x) &= \log \left( \int p(x|z) dz \right) \\
+   &= \log \left( \int \frac{q(z|x)}{q(z|x)} p(x,z) dz \right) \\
+   &= \log \left( \int q(z|x) \frac{p(x,z)}{q(z|x)}  dz \right) \\
+   &= \log \mathbb{E}_{q(z|x)} \left( \frac{p(x,z)}{q(z|x)} \right) \\
+   &\ge \mathbb{E}_{q(z|x)} \left( \log \frac{p(x,z)}{q(z|x)} \right) \\
+   &\ge \mathbb{E}_{q(z|x)} \left( \log \frac{p(x|z)p(z)}{q(z|x)} \right) \\
+   &\ge \mathbb{E}_{q(z|x)} \left( \log p(x|z) + \log \frac{p(z)}{q(z|x)} \right) \\
+   &\ge \mathbb{E}_{q(z|x)} \left( \textcolor{blue}{\log p(x|z)} + \textcolor{green}{\log p(z) - \log q(z|x)} \right) \\
+ \end{align*}
+$$
+
+The blue part trains the decoder, while the green part trains the encoder. Furthermore, the blue part will simplify to the MSE, while the green part is the exact defition of the KL divergence. Let's start with the decoder part, because that's a bit easier.
+
+I said earlier that the encoder outputs a $\mu$ and a $\sigma$ which we use to sample the latent vector $z$. The decoder technically also outputs both of these, but in practice, we set $\sigma$ to a constant and use $\mu$ directly. Because the decoder is a normal distribution, we can write this:
+
+$$
+\begin{align*}
+p(x|z) &= \frac{1}{(2\pi\sigma^2)^{D/2}} \exp\left(-\frac{\|x - x_{rec}(z)\|^2}{2\sigma^2}\right) \\
+\log p(x|z) &= \log\left( \frac{1}{(2\pi\sigma^2)^{D/2}} \right) - \frac{\|x - x_{rec}(z)\|^2}{2\sigma^2}
+\end{align*}
+$$
+
+When it comes to optimization, everything that is a constant, we don't care about. This means that the only thing that does remain and is NOT constant is:
+
+$$
+{(x - x_{rec}(z))}^2
+$$
+
+Which is the mean squared error (and $x_{rec}$ is the output of our decoder). Now, let's have a look at the encoder part.
