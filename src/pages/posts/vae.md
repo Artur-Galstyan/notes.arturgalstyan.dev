@@ -50,7 +50,7 @@ One thing you might be thinking is this: if I give my AE an image of a $1$ and I
 
 The unfortunate truth is: no!
 
-But if we could somehow tidy up the latent space, then yes, we could generate new and authentic looking images. And the way we can tidy the latent space up is by using VAE.
+But if we could somehow tidy up the latent space, then yes, we could generate new and authentic looking images. And the way we can tidy the latent space up is by using VAE. VAEs solve this by forcing the latent space to follow a specific distribution (Gaussian), which creates a smooth, organized latent space where interpolation works!
 
 In a VAE, we have 2 spaces: the data space $p(x)$ and the latent space $p(z)$ and we don't really have access to any of those (we only have a bunch of data points sampled from $p(x)$ but that's about it). VAE has a design decision and says that $p(z)$ is normal distributed and this will be very useful later in the loss function derivation.
 
@@ -64,7 +64,7 @@ $$
 \end{align*}
 $$
 
-These mappins are like our encoder and decoder: $p(x|z)$ generates (or reconstructs) $x$ from a latent vector $z$ and vice versa.
+These mappings are like our encoder and decoder: $p(x|z)$ generates (or reconstructs) $x$ from a latent vector $z$ and vice versa.
 
 And we don't really know those either (at least so far).
 
@@ -85,7 +85,7 @@ $$
   q(z|x) \approx p(z|x)
 $$
 
-And we do our training correct, then $q(z|x)$ will indeed be a good approximation to the true encoder and $q(z|x)$ will also be a normal distribution. And btw. this means that it will output a $\mu$ and a $\sigma$, which we can use to sample the vector $z$.
+And we do our training correctly, then $q(z|x)$ will indeed be a good approximation to the true encoder and $q(z|x)$ will also be a normal distribution. And btw. this means that it will output a $\mu$ and a $\sigma$, which we can use to sample the vector $z$.
 
 ## Deriving the Loss Function
 
@@ -98,7 +98,7 @@ $$
 The first thing we can say is this:
 
 $$
-  \log p(x) = \log \int p(x|z) dz
+  \log p(x) = \log \int p(x|z)p(z) dz
 $$
 
 And that means _marginalising_ out $z$. To better understand this, imagine you had 2 die (an $x$-dice and a $z$-dice) and their probabilities are skewed such that higher numbers have higher probabilities. A probability matrix would look like this:
@@ -116,8 +116,9 @@ This process is called _marginalization_. It's essentially the same as $\log p(x
 We use the "_multiply by one_" trick to introduce a new term:
 $$
   \begin{align*}
-  \log p(x) &= \log \left( \int p(x|z) dz \right) \\
-   &= \log \left( \int \frac{q(z|x)}{q(z|x)} p(x,z) dz \right)
+\log p(x) &= \log \left( \int p(x|z)p(z) dz \right) \\
+&= \log \left( \int \frac{q(z|x)}{q(z|x)} p(x|z)p(z) dz \right) \\
+&= \log \left( \int \frac{q(z|x)}{q(z|x)} p(x,z) dz \right)
  \end{align*}
 $$
 
@@ -126,7 +127,8 @@ Pretty neat, now we introduced our approximation. We can rearrange some stuff to
 
 $$
   \begin{align*}
-  \log p(x) &= \log \left( \int p(x|z) dz \right) \\
+  \log p(x) &= \log \left( \int p(x|z)p(z) dz \right) \\
+   &= \log \left( \int \frac{q(z|x)}{q(z|x)} p(x|z)p(z) dz \right) \\
    &= \log \left( \int \frac{q(z|x)}{q(z|x)} p(x,z) dz \right) \\
    &= \log \left( \int q(z|x) \frac{p(x,z)}{q(z|x)}  dz \right)
  \end{align*}
@@ -170,7 +172,8 @@ We have the same setting in our derivation:
 
 $$
   \begin{align*}
-  \log p(x) &= \log \left( \int p(x|z) dz \right) \\
+  \log p(x) &= \log \left( \int p(x|z)p(z) dz \right) \\
+   &= \log \left( \int \frac{q(z|x)}{q(z|x)} p(x|z)p(z) dz \right) \\
    &= \log \left( \int \frac{q(z|x)}{q(z|x)} p(x,z) dz \right) \\
    &= \log \left( \int q(z|x) \frac{p(x,z)}{q(z|x)}  dz \right)
  \end{align*}
@@ -181,7 +184,8 @@ Where $q(z|x)$ is the probability to sample $z$ (this is akin to the Q(z) from t
 
 $$
   \begin{align*}
-  \log p(x) &= \log \left( \int p(x|z) dz \right) \\
+  \log p(x) &= \log \left( \int p(x|z)p(z) dz \right) \\
+   &= \log \left( \int \frac{q(z|x)}{q(z|x)} p(x|z)p(z) dz \right) \\
    &= \log \left( \int \frac{q(z|x)}{q(z|x)} p(x,z) dz \right) \\
    &= \log \left( \int q(z|x) \frac{p(x,z)}{q(z|x)}  dz \right) \\
    &= \log \mathbb{E}_{q(z|x)} \left( \frac{p(x,z)}{q(z|x)} \right)
@@ -204,7 +208,8 @@ For our derivation, we can now write:
 
 $$
   \begin{align*}
-  \log p(x) &= \log \left( \int p(x|z) dz \right) \\
+  \log p(x) &= \log \left( \int p(x|z)p(z) dz \right) \\
+   &= \log \left( \int \frac{q(z|x)}{q(z|x)} p(x|z)p(z) dz \right) \\
    &= \log \left( \int \frac{q(z|x)}{q(z|x)} p(x,z) dz \right) \\
    &= \log \left( \int q(z|x) \frac{p(x,z)}{q(z|x)}  dz \right) \\
    &= \log \mathbb{E}_{q(z|x)} \left( \frac{p(x,z)}{q(z|x)} \right) \\
@@ -218,7 +223,8 @@ Because $p(x,z) = p(x|z)p(z)$, we can write and rearrange the terms like so:
 
 $$
   \begin{align*}
-  \log p(x) &= \log \left( \int p(x|z) dz \right) \\
+  \log p(x) &= \log \left( \int p(x|z)p(z) dz \right) \\
+   &= \log \left( \int \frac{q(z|x)}{q(z|x)} p(x|z)p(z) dz \right) \\
    &= \log \left( \int \frac{q(z|x)}{q(z|x)} p(x,z) dz \right) \\
    &= \log \left( \int q(z|x) \frac{p(x,z)}{q(z|x)}  dz \right) \\
    &= \log \mathbb{E}_{q(z|x)} \left( \frac{p(x,z)}{q(z|x)} \right) \\
@@ -240,7 +246,8 @@ And because of that, we can rewrite the term as:
 
 $$
   \begin{align*}
-  \log p(x) &= \log \left( \int p(x|z) dz \right) \\
+  \log p(x) &= \log \left( \int p(x|z)p(z) dz \right) \\
+   &= \log \left( \int \frac{q(z|x)}{q(z|x)} p(x|z)p(z) dz \right) \\
    &= \log \left( \int \frac{q(z|x)}{q(z|x)} p(x,z) dz \right) \\
    &= \log \left( \int q(z|x) \frac{p(x,z)}{q(z|x)}  dz \right) \\
    &= \log \mathbb{E}_{q(z|x)} \left( \frac{p(x,z)}{q(z|x)} \right) \\
@@ -248,10 +255,11 @@ $$
    &\ge \mathbb{E}_{q(z|x)} \left( \log \frac{p(x|z)p(z)}{q(z|x)} \right) \\
    &\ge \mathbb{E}_{q(z|x)} \left( \log p(x|z) + \log \frac{p(z)}{q(z|x)} \right) \\
    &\ge \mathbb{E}_{q(z|x)} \left( \textcolor{blue}{\log p(x|z)} + \textcolor{green}{\log p(z) - \log q(z|x)} \right) \\
+   &\ge \mathbb{E}_{q(z|x)}(\log p(x|z)) + \mathbb{E}_{q(z|x)}(\log p(z) - \log q(z|x)) \\
  \end{align*}
 $$
 
-The blue part trains the decoder, while the green part trains the encoder. Furthermore, the blue part will simplify to the MSE, while the green part is the exact defition of the KL divergence. Let's start with the decoder part, because that's a bit easier.
+The blue part trains the decoder, while the green part trains the encoder. Furthermore, the blue part will simplify to the MSE, while the green part is the exact definition of the *negative* KL divergence. Let's start with the decoder part, because that's a bit easier.
 
 I said earlier that the encoder outputs a $\mu$ and a $\sigma$ which we use to sample the latent vector $z$. The decoder technically also outputs both of these, but in practice, we set $\sigma$ to a constant and use $\mu$ directly. Because the decoder is a normal distribution, we can write this:
 
@@ -268,4 +276,50 @@ $$
 {(x - x_{rec}(z))}^2
 $$
 
-Which is the mean squared error (and $x_{rec}$ is the output of our decoder). Now, let's have a look at the encoder part.
+Which is the mean squared error (and $x_{rec}$ is the output of our decoder). Now, let's have a look at the encoder:
+
+$$
+\mathbb{E}_{q(z|x)}(\log p(z) - \log q(z|x))
+$$
+
+Which is precisely the definition for the KL divergence, and because $p(z)$ is a normal distribution, the KL divergence simplifies to a closed form:
+
+$$
+\begin{align*}
+D_{KL}(q(z|x) \,||\, p(z))
+&= \log\frac{\sigma_z}{\sigma_e} + \frac{\sigma_e^2 + (\mu_e - \mu_z)^2}{2\sigma_z^2} - \frac{1}{2} \\
+&= \log\frac{1}{\sigma_e} + \frac{\sigma_e^2 + (\mu_e - 0)^2}{2 \cdot 1^2} - \frac{1}{2} \\
+&= -\log\sigma_e + \frac{\sigma_e^2 + \mu_e^2}{2} - \frac{1}{2} \\
+&= -\frac{1}{2}\log(\sigma_e^2) + \frac{\sigma_e^2 + \mu_e^2 - 1}{2} \\
+&= \frac{1}{2} \left( \mu_e^2 + \sigma_e^2 - \log(\sigma_e^2) - 1 \right) \\
+&= -\frac{1}{2} \left( 1 + \log(\sigma_e^2) - \mu_e^2 - \sigma_e^2 \right)
+\end{align*}
+$$
+
+$\mu_z$ and $\sigma_z$ come from $p(z)$ and because $p(z)$ is a Gaussian, those are $0$ and $1$ respectively and $\mu_e$ and $\sigma_e$ come from $q(z|x)$ (i.e. the encoder approximation).
+
+So, if we put everything together, we get:
+
+$$
+\begin{align*}
+  \log p(x) &= \log \left( \int p(x|z)p(z) dz \right) \\
+   &= \log \left( \int \frac{q(z|x)}{q(z|x)} p(x|z)p(z) dz \right) \\
+&= \log \int \frac{q(z|x)}{q(z|x)} p(x|z)p(z) dz \\
+&= \log \int q(z|x) \frac{p(x|z)p(z)}{q(z|x)} dz \\
+&= \log \mathbb{E}_{q(z|x)} \left[ \frac{p(x|z)p(z)}{q(z|x)} \right] \\
+&\geq \mathbb{E}_{q(z|x)} \left[ \log \frac{p(x|z)p(z)}{q(z|x)} \right] \quad \text{(Jensen's inequality)} \\
+&= \mathbb{E}_{q(z|x)} \left[ \log p(x|z) + \log p(z) - \log q(z|x) \right] \\
+&= \mathbb{E}_{q(z|x)}[\log p(x|z)] + \mathbb{E}_{q(z|x)}[\log p(z) - \log q(z|x)] \\
+&= \mathbb{E}_{q(z|x)}[\log p(x|z)] - D_{KL}(q(z|x) \,||\, p(z)) \quad \text{(this is the ELBO)}\\
+\log p(x|z) &= -\frac{1}{2}||x - x_{rec}(z)||^2 - \frac{d}{2}\log(2\pi) \\
+D_{KL}(q(z|x) \,||\, p(z)) &= \frac{1}{2}\sum(\mu_e^2 + \sigma_e^2 - \log \sigma_e^2 - 1) \\
+\text{Loss} &= -\text{ELBO} \\
+&= -\mathbb{E}_{q(z|x)}[\log p(x|z)] + D_{KL}(q(z|x) \,||\, p(z)) \\
+&= -\mathbb{E}_{q(z|x)}\left[-\frac{1}{2}||x - x_{rec}(z)||^2 - \frac{d}{2}\log(2\pi)\right] + D_{KL}(q(z|x) \,||\, p(z)) \\
+&= \mathbb{E}_{q(z|x)}\left[\frac{1}{2}||x - x_{rec}(z)||^2 + \frac{d}{2}\log(2\pi)\right] + D_{KL}(q(z|x) \,||\, p(z)) \\
+&= \frac{1}{2}\mathbb{E}_{q(z|x)}[||x - x_{rec}(z)||^2] + \frac{1}{2}\sum(\mu_e^2 + \sigma_e^2 - \log \sigma_e^2 - 1) + \text{const} \\
+\mathcal{L} &= \mathbb{E}_{q(z|x)}[||x - x_{rec}(z)||^2] + \frac{1}{2}\sum(\mu_e^2 + \sigma_e^2 - \log \sigma_e^2 - 1)
+\end{align*}
+$$
+
+The $+\text{const}$ part refers to this part $\frac{d}{2}\log(2\pi)$ which is just some constant and those don't matter when we minimise in our ML libraries and the same goes for scalars, which is why we dropped the $1/2$ too.
