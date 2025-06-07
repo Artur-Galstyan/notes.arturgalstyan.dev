@@ -108,10 +108,13 @@ And that means _marginalising_ out $z$. To better understand this, imagine you h
 The redder areas indicate a higher probability. If you were interested in the probability that $p(x=5)$, then, to calculate that, you need to compute the sum of all the outcomes where $p(x=5, z=any)$ (that's the one I highlighted in the image), so, in other words, it's:
 
 $$
-  p(x=5) = \sum_{i=1}^6 p(x=5, z=i)
+  \begin{align*}
+  p(x=5) &= \sum_{i=1}^6 p(x=5, z=i)
+  p(x=5) &= \sum_{i=1}^6 p(x=5|z=i) p(z=i)
+  \end{align*}
 $$
 
-This process is called _marginalization_. It's essentially the same as $\log p(x) = \log \int p(x|z) dz$, except of course there we are dealing with continious values (and the log is there for numerical stability, but doesn't change the probabilities underneath).
+This process is called _marginalization_. It's essentially the same as $\log p(x) = \log \int p(x|z) p(z) dz$, except of course there we are dealing with continious values (and the log is there for numerical stability, but doesn't change the probabilities underneath).
 
 We use the "_multiply by one_" trick to introduce a new term:
 $$
