@@ -4,7 +4,7 @@ title: Monte-Carlo Tree Search
 date: 2025-07-27
 ---
 
-# Monte-Carlo Tree Search (DRAFT)
+# Monte-Carlo Tree Search
 
 Monte-Carlo Tree Search (MCTS) is an incredible planning algorithm that was successfully used in AlphaGo a couple of years (almost a decade ago), which was responsible for beating expert humans in the game of Go.
 
@@ -456,3 +456,107 @@ else:
         action=selection_output.action,
     )
 ```
+
+### Backpropagation
+
+This is the last step in MCTS in which we need to update the values of the tree. This is the update function
+
+```python
+def backpropagate(tree: Tree, leaf_index: int) -> Tree:
+    idx = leaf_index
+    value_to_propagate = tree.v_s[idx]
+
+    while idx != ROOT_INDEX:
+        p = tree.parent_indices[idx]
+        a = tree.action_from_parent[idx]
+
+        total_return = tree.r_sa[p][a] + value_to_propagate
+
+        tree.v_s[p] = (tree.v_s[p] * tree.n_s[p] + total_return) / (tree.n_s[p] + 1)
+        tree.n_s[p] += 1
+
+        q = tree.q_sa[p][a]
+        n_sa = tree.n_sa[p][a]
+        tree.q_sa[p][a] = (q * n_sa + total_return) / (n_sa + 1)
+        tree.n_sa[p][a] += 1
+
+        value_to_propagate = total_return
+        idx = p
+
+    return tree
+```
+
+Basically, you are given the leaf index as input and then have to move your way *up* the tree. Along the way, you update the values and visit counts using a running average formula.
+
+The key mathematical insight is that we're maintaining running averages for both node values $V(s)$ and action-values $Q(s,a)$. When we get a new sample (the `total_return`), we update these averages incrementally.
+
+For node values, the update rule is:
+$$V(s) = \frac{V(s) \cdot N(s) + \text{total_return}}{N(s) + 1}$$
+
+This is equivalent to computing the average of all returns that have passed through this node. The `total_return` includes both the immediate reward from taking action $a$ in state $s$ plus the propagated value from deeper in the tree.
+
+Similarly, for action-values:
+$$Q(s,a) = \frac{Q(s,a) \cdot N(s,a) + \text{total_return}}{N(s,a) + 1}$$
+
+The visit counts $N(s)$ and $N(s,a)$ are also incremented to keep track of how many times we've updated each value.
+
+The `value_to_propagate` gets updated to be the `total_return` for the next iteration up the tree, creating a chain of value updates from leaf to root.
+
+
+### Putting it all together
+
+Finally, this is the entire loop:
+
+
+```python
+class MCTS:
+    @staticmethod
+    def search(
+        n_actions: int,
+        root_fn: Callable[[], RootFnOutput],
+        policy_fn: Callable[[PolicyInput], PolicyReturn],
+        step_fn: Callable[[StepFnInput], StepFnReturn],
+        max_depth: int,
+        n_iterations: int,
+    ):
+        node_index_counter = 0
+        tree = generate_tree(
+            n_nodes=n_iterations + 1, n_actions=n_actions, root_fn_output=root_fn()
+        )
+
+        for iteration in range(n_iterations):
+            selection_output = selection(tree, max_depth, policy_fn)
+
+            if (
+                tree.children_indices[selection_output.parent_index][
+                    selection_output.action
+                ]
+                == UNVISITED
+            ):
+                node_index_counter += 1
+                leaf_node = expansion(
+                    tree, selection_output, node_index_counter, step_fn
+                )
+            else:
+                child_idx = tree.children_indices[selection_output.parent_index][
+                    selection_output.action
+                ]
+                leaf_node = LeafNode(
+                    node_index=child_idx,
+                    action=selection_output.action,
+                )
+
+            tree = backpropagate(tree, leaf_node.node_index)
+
+        return tree
+```
+
+Afterwards you will have a fully "trained" tree. Using this tree, you will have to come up with some way to interpret the results and choose an action accordingly. E.g. you might say that because actions that lead to the best result are used more, you could do this:
+
+```python
+def find_best_action(tree: Tree, node_index: int) -> int:
+    action_visits = tree.n_sa[node_index]
+    return max(range(len(action_visits)), key=lambda i: action_visits[i])
+```
+
+Which would give you the best action, using the `action_visits` as a proxy.
