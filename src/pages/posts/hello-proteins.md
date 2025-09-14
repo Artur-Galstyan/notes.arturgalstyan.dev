@@ -391,3 +391,136 @@ Our model didn't really improve however:
 Train - {'loss': Array(0.24375229, dtype=float32), 'accuracy': Array(0.5818594, dtype=float32)}
 Test  - Loss: 0.2431, Accuracy: 74.6787
 ```
+
+## Little Whoopsie
+
+At this point, I was a bit confused and especially skeptical about the high accuracy on the test data, but pathetic performance on the training data, as it's usually the other way around.
+
+The issue was the model, the used loss function as well as the general problem at hand. You see, we are dealing with a classification problem (0 or 1, soluble or not), but our model was set up for a regression task -> i.e. it outputs a continious number instead of a class.
+
+To remedy this, we change the loss function to this:
+
+```python
+def loss_fn(model: SimpleModel, x: jt.Array, y: jt.Array) -> tuple[jt.Array, jt.Array]:
+    logits = eqx.filter_vmap(model)(x)
+    return jnp.mean(optax.softmax_cross_entropy(logits=logits, labels=y)), logits
+```
+
+We also need to change the preprocessor to one-hot encode the labels:
+
+```python
+class ProteinPreprocessor(grain.transforms.Map):
+    def map(self, example):
+        sequence = example["sequences"]
+        label = example["labels"]
+        if isinstance(sequence, bytes):
+            sequence = sequence.decode("utf-8")
+        sequence = sequence[:max_protein_length]
+        sequence = sequence.ljust(max_protein_length, "Z")
+        indices = [char_to_int[aa] for aa in sequence]
+        return {
+            "features": jnp.array(indices, jnp.int32),
+            "label": jnp.zeros(shape=(2,)).at[label].set(1),
+        }
+```
+
+Also, with this change we have to correct the way the accuracy is calculated:
+
+```python
+@eqx.filter_jit
+def eval_step(model: SimpleModel, x: jt.Array, y: jt.Array):
+    print("eval_step JIT")
+    logits = eqx.filter_vmap(model)(x)
+    loss = jnp.mean(optax.softmax_cross_entropy(logits=logits, labels=y))
+
+    predicted_classes = jnp.argmax(logits, axis=-1)
+    true_classes = jnp.argmax(y, axis=-1)
+    correct_preds = jnp.sum(predicted_classes == true_classes)
+
+    return loss, correct_preds
+
+
+@eqx.filter_jit
+def step_fn(
+    model: SimpleModel,
+    x: jt.Array,
+    y: jt.Array,
+    optimizer: optax.GradientTransformation,
+    opt_state: optax.OptState,
+) -> tuple[SimpleModel, optax.OptState, dict]:
+    print("step_fn JIT")
+    (loss_value, preds), grads = eqx.filter_value_and_grad(loss_fn, has_aux=True)(
+        model, x, y
+    )
+    updates, opt_state = optimizer.update(
+        grads, opt_state, eqx.filter(model, eqx.is_array)
+    )
+    model = eqx.apply_updates(model, updates)
+
+    predicted_classes = jnp.argmax(preds, axis=-1)
+    true_classes = jnp.argmax(y, axis=-1)
+    accuracy = jnp.mean(predicted_classes == true_classes)
+
+    metrics = {"loss": loss_value, "accuracy": accuracy}
+    return model, opt_state, metrics
+```
+
+and change `output_features` to be `2`. With that done, the "correct" loss is this:
+
+```
+Train - {'loss': Array(0.5717863, dtype=float32), 'accuracy': Array(0.63341343, dtype=float32)}
+Test  - Loss: 0.5651, Accuracy: 0.6384
+```
+
+And this makes just WAY more sense.
+
+## Some Model Parameter Changes
+
+I tried a couple of configurations, such as these hyperparameters
+
+```python
+out_features = 2
+embedding_size = 16
+learning_rate = 0.001
+n_epochs = 10
+```
+
+and this model
+
+```python
+class SimpleModel(eqx.Module):
+    embedding: eqx.nn.Embedding
+    conv1: eqx.nn.Conv1d
+    conv2: eqx.nn.Conv1d
+    linear: eqx.nn.Linear
+
+    def __init__(
+        self, n_vocab: int, embedding_size: int, out_features: int, key: jt.PRNGKeyArray
+    ):
+        k1, k2, k3, k4 = jax.random.split(key, 4)
+        hidden_size = 32
+        self.embedding = eqx.nn.Embedding(n_vocab, embedding_size, key=k1)
+        self.conv1 = eqx.nn.Conv1d(embedding_size, hidden_size, kernel_size=7, key=k2)
+        self.conv2 = eqx.nn.Conv1d(hidden_size, hidden_size, kernel_size=5, key=k3)
+        self.linear = eqx.nn.Linear(hidden_size, out_features, key=k4)
+
+    def __call__(self, x: jt.Int[jt.Array, " seq_len"]) -> jt.Array:
+        x = eqx.filter_vmap(self.embedding)(x)
+        x = jnp.transpose(x)
+        x = self.conv1(x)
+        x = jax.nn.relu(x)
+        x = self.conv2(x)
+        x = jax.nn.relu(x)
+        x = jnp.max(x, axis=-1)
+        x = self.linear(x)
+        return x
+```
+
+but my loss seems to plateau at this value:
+
+```
+Train - {'loss': Array(0.5040968, dtype=float32), 'accuracy': Array(0.7300881, dtype=float32)}
+Test  - Loss: 0.5948, Accuracy: 0.6587
+```
+
+regardless of the hyperparameters. This means, I need a better model.
