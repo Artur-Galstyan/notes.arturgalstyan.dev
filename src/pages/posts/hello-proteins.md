@@ -524,3 +524,30 @@ Test  - Loss: 0.5948, Accuracy: 0.6587
 ```
 
 regardless of the hyperparameters. This means, I need a better model.
+
+## The Crossroad
+
+Ok so at this point, I have a couple of options. My model is bad because it doesn't really understand that proteins fold. It's working with a 1D string unaware of what it actually means in the physical world. I need to TELL it that somehow.
+
+We can once again look at LLM research for guidance. There we have models called "encoders". Those take in some text and output a vector/matrix in latent space. The idea being that the encoded vector carries more information about the protein sequence than our crude `embeddings` layer.
+
+In the world of language, a word like "king" becomes a vector that points in some direction and the word "man" becomes a vector that might point to a similar direction, because they are semantically similar (a king is a man). The word "giraffe" would point in a completely different direction (it has nothing really in common with "king" or "man"). So those vectors have "meaning" (at least in relation to each other). My idea is that I could use those encoded vectors as features in my model.
+
+Ok, but where do I get those vectors from? Luckily, there is a company that has already pretrained such a model and made it available for everyone. The model in question is called `esm-c`, which is the encoder model in their model familiy. In those vectors, I'm hoping that proteries from how they are folded are in there that my model head can then pick up.
+
+Honestly, I don't really know how encoders are trained (yet!) and for now I will treat this as a black box, mainly to establish an upper bound. AFAIK, it's got something to do with masked language modelling, i.e. _fill in the blank_ kind of training. I can't compete against that company with their many PhDs working round the clock - I have 1/10th their brains and $1e^{-18}$ of their resources. This means, I will use their encoder, hopefully get some nice performance and then _try_ to create my own tiny encoder model and see how close I can get.
+
+## The Sad Part
+
+The sad part is that the ESM-C model is written in ... you guessed it PyTorch! _Surprised Pikachu Face_.
+
+This complicates things a bit and basically means that the encoder is _frozen_ to me. My gradients won't flow through the encoder and I won't be able to update it - it's not differentiable for me. But do I even need to? The answer is probably no, because I won't find proteins on the internet (or in the wild, even if I had a lab) that they haven't trained the model on already. This means that I don't have any data to really improve it.
+
+Ok but the model is in PyTorch and my model is in JAX, so how do I connect the two? Well there are 2 ways:
+
+### The CPU Round Trip
+This is the most obvious solution. PyTorch computed some tensor, you do a little `to_cpu()` or whatever the function is in PyTorch, then maybe turn that into a Numpy array, and then finally pass that Numpy array into a JAX array. But I don't think I need to tell you that this is very slow. You might have PyTorch tensors that are multiple gigabytes large which means you are wasting precious GPU bandwith and CPU power for the conversion. But the tensor is already in the GPU, the numbers are there. The GPU itself doesn't care about the framework or something; e.g. for NVIDIA, it's all just CUDA wrappers anyway. Enter the second way.
+
+### dlpack
+
+Researchers and engineers have notices this issue and came up with a solution, a standard format, that allows each framework (if they are compatible) to just "look up" those numbers in the GPU (i.e. use pointers) and say whippety whoppety, these numbers are now my property. More technically, you export the data as a dlpack capsule, which contains pointers to the actual numbers and some metadata describing the tensor. dlpack compatible frameworks (such as JAX or PyTorch) can take these capsules and "import"  (and export) them. This is what we will do.
