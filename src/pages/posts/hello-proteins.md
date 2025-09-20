@@ -551,3 +551,18 @@ This is the most obvious solution. PyTorch computed some tensor, you do a little
 ### dlpack
 
 Researchers and engineers have notices this issue and came up with a solution, a standard format, that allows each framework (if they are compatible) to just "look up" those numbers in the GPU (i.e. use pointers) and say whippety whoppety, these numbers are now my property. More technically, you export the data as a dlpack capsule, which contains pointers to the actual numbers and some metadata describing the tensor. dlpack compatible frameworks (such as JAX or PyTorch) can take these capsules and "import"  (and export) them. This is what we will do.
+
+
+## Some Thoughts as the Model is Training
+
+I have added the ESM-C model into the pipeline and changed our model to be a simple MLP. It gets as input the output of the ESM encoder but with mean pooling applied to it (because the output of the encoder is of shape 460x960, where 460 is the sequence length and 960 is the embedding size).
+
+Currently, as of writing this, I'm in Switzerland and only have my laptop with me. I generated all the embeddings (which quickly became a folder > 120 GBs) and now I'm simply loading those in as needed. But I only have my laptop. A single epoch takes around 5 hours on a CPU, which is super duper slow (mainly because of I/O but what can you do).
+
+But as the model is training, I was thinking about different encoder models. Yes, I will train a BERT-like model (similar to ESM) but I might also try out other wild ideas (like SSMs for encoders).
+
+It was here that I noticed that encoders are trained _differently_, i.e. on different objectives. BERT-like encoders train on masked language modelling while SSMs are trained on god-knows-what. So there is no **direct** way to compare these models.
+
+However, we can use our solubility task (the so-called _downstream task_) as a proxy! The higher the performance on the downstream task the better (for that downstream task) is the encoder.
+
+This doesn't mean that my stitched-up Frankenstein's model is always better and to measure the general performance, we actually need more downstream tasks and measure the mean performance delta across all tasks. For now, it's just solubility, but this is good to keep in mind for later.
