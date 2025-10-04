@@ -4,7 +4,7 @@ title: Hello, Proteins!
 date: 2025-09-07
 ---
 
-# Hello, Proteins! (DRAFT)
+# Hello, Proteins!
 
 My goal for 2026 is to work at a biotech company that intersects with machine learning (if they let me of course). While language, image and video models are pretty cool (and they really are!), I think the best application for AI (until we discover AGI) is in drug discovery. And in the realm of drug discovery, proteins are **key**!
 
