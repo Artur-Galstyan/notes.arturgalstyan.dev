@@ -1,6 +1,6 @@
 ---
 layout: ../../layouts/PostLayout.astro
-title: Hello, Proteins! (DRAFT)
+title: Hello, Proteins!
 date: 2025-09-07
 ---
 
@@ -566,3 +566,592 @@ It was here that I noticed that encoders are trained _differently_, i.e. on diff
 However, we can use our solubility task (the so-called _downstream task_) as a proxy! The higher the performance on the downstream task the better (for that downstream task) is the encoder.
 
 This doesn't mean that my stitched-up Frankenstein's model is always better and to measure the general performance, we actually need more downstream tasks and measure the mean performance delta across all tasks. For now, it's just solubility, but this is good to keep in mind for later.
+
+
+## Actually Training the Thing
+
+Ok, so it's been a couple of days, but here's the current code:
+
+<details>
+    <summary>Data Loading and Preprocessing</summary>
+
+```python
+import json
+import os
+
+import array_record
+import grain
+import jax.numpy as jnp
+import polars as pl
+from Bio import SeqIO
+
+AMINO_ACIDS = "ACDEFGHIKLMNPQRSTVWY"
+VOCAB = ["Z"] + list(AMINO_ACIDS)
+INT_TO_CHAR = {i: char for i, char in enumerate(VOCAB)}
+CHAR_TO_INT = {char: i for i, char in enumerate(VOCAB)}
+
+
+class ProteinPreprocessor(grain.transforms.Map):
+    max_protein_length: int
+
+    def __init__(self, max_protein_length: int):
+        self.max_protein_length = max_protein_length
+
+    def map(self, example):
+        sequence = example["sequences"]
+        label = example["labels"]
+        if isinstance(sequence, bytes):
+            sequence = sequence.decode("utf-8")
+        sequence = sequence[: self.max_protein_length]
+        sequence = sequence.ljust(self.max_protein_length, "Z")
+        indices = [CHAR_TO_INT.get(aa, 0) for aa in sequence]
+        return {
+            "features": jnp.array(indices, jnp.int32),
+            "sequence": sequence,
+            "label": jnp.zeros(shape=(2,)).at[label].set(1),
+        }
+
+
+class DataFrameDataSource:
+    def __init__(self, df: pl.DataFrame):
+        self._data = df.to_dicts()
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+    def __getitem__(self, record_key: int) -> dict:
+        return self._data[record_key]
+
+
+def parse_plmsol_fasta(fasta_path):
+    sequences = []
+    solubility_labels = []
+    if not os.path.exists(fasta_path):
+        raise FileNotFoundError(f"File {fasta_path} not found.")
+    for record in SeqIO.parse(open(fasta_path), "fasta"):
+        try:
+            solubility_str = record.description.split(" ")[-1].split("-")[-1]
+            sequences.append(str(record.seq))
+            solubility_labels.append(solubility_str)
+        except IndexError:
+            print(f"Warning: Could not parse label from: {record.description}")
+            continue
+    return sequences, solubility_labels
+
+
+def convert_plmsol_labels_to_binary(labels):
+    binary_labels = []
+    for label in labels:
+        if label == "U":
+            binary_labels.append(0)
+        elif label == "0":
+            binary_labels.append(0)
+        elif label == "1":
+            binary_labels.append(1)
+        else:
+            binary_labels.append(0)
+    return binary_labels
+
+
+def write_df_to_json_array_record(df, path):
+    with array_record.ArrayRecordWriter(path, "w") as writer:
+        for record in df.to_dicts():
+            record_bytes = json.dumps(record).encode("utf-8")
+            writer.write(record_bytes)
+
+
+def get_datasources(percentile: int):
+    proteinea_splits = {
+        "train": "solubility_training.csv",
+        "validation": "solubility_validation.csv",
+        "test": "solubility_testing.csv",
+    }
+
+    plmsol_base_path = "experiments/plmsol_dataset"
+    plmsol_splits = {
+        "train": "train_dataset.fasta",
+        "validation": "validation_dataset.fasta",
+        "test": "test_dataset.fasta",
+    }
+
+    proteinea_train_df = pl.read_csv(
+        "hf://datasets/proteinea/solubility/" + proteinea_splits["train"]
+    )
+    proteinea_test_df = pl.read_csv(
+        "hf://datasets/proteinea/solubility/" + proteinea_splits["test"]
+    )
+    proteinea_validation_df = pl.read_csv(
+        "hf://datasets/proteinea/solubility/" + proteinea_splits["validation"]
+    )
+
+    plmsol_dfs = {}
+    for split_name, file_name in plmsol_splits.items():
+        file_path = os.path.join(plmsol_base_path, file_name)
+        seqs, string_labels = parse_plmsol_fasta(file_path)
+        if seqs:
+            binary_labels = convert_plmsol_labels_to_binary(string_labels)
+            plmsol_dfs[split_name] = pl.DataFrame(
+                {"sequences": seqs, "labels": binary_labels}
+            )
+        else:
+            plmsol_dfs[split_name] = pl.DataFrame(
+                {"sequences": [], "labels": []},
+                schema={"sequences": pl.String, "labels": pl.Int64},
+            )
+
+    plmsol_train_df = plmsol_dfs.get("train")
+    plmsol_test_df = plmsol_dfs.get("test")
+    plmsol_validation_df = plmsol_dfs.get("validation")
+
+    assert plmsol_train_df is not None
+    assert plmsol_test_df is not None
+    assert plmsol_validation_df is not None
+
+    train_df = pl.concat([proteinea_train_df, plmsol_train_df])
+    test_df = pl.concat([proteinea_test_df, plmsol_test_df])
+    validation_df = pl.concat([proteinea_validation_df, plmsol_validation_df])
+
+    train_df = train_df.with_columns(
+        pl.col("sequences").str.len_chars().alias("length"),
+    )
+    max_protein_length = int(
+        train_df.select(pl.col("length").quantile(percentile / 100)).item()
+    )
+
+    train_source = DataFrameDataSource(train_df)
+    test_source = DataFrameDataSource(test_df)
+    validation_source = DataFrameDataSource(validation_df)
+
+    return train_source, test_source, validation_source, max_protein_length
+
+
+def get_dataloaders(
+    train_source,
+    test_source,
+    validation_source,
+    epoch: int,
+    batch_size: int,
+    max_protein_length: int,
+):
+    train_index_sampler = grain.samplers.IndexSampler(
+        num_records=len(train_source),
+        shuffle=True,
+        shard_options=grain.sharding.ShardOptions(
+            shard_index=0, shard_count=1, drop_remainder=True
+        ),
+        seed=4 + epoch,
+        num_epochs=1,
+    )
+    train_data_loader = grain.DataLoader(
+        data_source=train_source,
+        operations=[
+            ProteinPreprocessor(max_protein_length),
+            grain.transforms.Batch(batch_size=batch_size),
+        ],
+        sampler=train_index_sampler,
+    )
+
+    test_dataset_size = len(test_source)
+    validation_dataset_size = len(validation_source)
+    test_index_sampler = grain.samplers.IndexSampler(
+        num_records=test_dataset_size,
+        shuffle=False,
+        shard_options=grain.sharding.ShardOptions(
+            shard_index=0, shard_count=1, drop_remainder=True
+        ),
+        seed=42,
+        num_epochs=1,
+    )
+    test_data_loader = grain.DataLoader(
+        data_source=test_source,
+        operations=[
+            ProteinPreprocessor(max_protein_length),
+            grain.transforms.Batch(batch_size=batch_size),
+        ],
+        sampler=test_index_sampler,
+    )
+    validation_index_sampler = grain.samplers.IndexSampler(
+        num_records=validation_dataset_size,
+        shuffle=False,
+        shard_options=grain.sharding.ShardOptions(
+            shard_index=0, shard_count=1, drop_remainder=True
+        ),
+        seed=42,
+        num_epochs=1,
+    )
+    validation_data_loader = grain.DataLoader(
+        data_source=validation_source,
+        operations=[
+            ProteinPreprocessor(max_protein_length),
+            grain.transforms.Batch(batch_size=batch_size),
+        ],
+        sampler=validation_index_sampler,
+    )
+
+    return train_data_loader, test_data_loader, validation_data_loader
+```
+</details>
+
+
+<details>
+    <summary>The Training Loop</summary>
+
+```python
+import os
+
+import clu.metrics as clum
+import equinox as eqx
+import flax
+import jax
+import jax.numpy as jnp
+import jaxtyping as jt
+import mlflow
+import optax
+import torch
+from data import get_dataloaders, get_datasources
+from esm.models.esmc import ESMC
+from esm.sdk.api import ESMProtein, LogitsConfig
+from tabulate import tabulate
+from tqdm import tqdm
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
+RUN_DESCRIPTION = "ESM-C 300M embeddings + simple backbone (no attention)"
+
+# Global ESM client
+ESM_CLIENT = ESMC.from_pretrained("esmc_300m").to("cuda")  # or "cpu"
+
+
+class SimpleModel(eqx.Module):
+    mlp: eqx.nn.MLP
+    linear: eqx.nn.Linear
+
+    def __init__(
+        self,
+        embedding_size: int,
+        out_features: int,
+        key: jt.PRNGKeyArray,
+    ):
+        k1, k2 = jax.random.split(key, 2)
+        d_inner = 128
+
+        self.mlp = eqx.nn.MLP(
+            embedding_size, d_inner, width_size=d_inner, depth=4, key=k1
+        )
+        self.linear = eqx.nn.Linear(d_inner, out_features, key=k2)
+
+    def __call__(
+        self,
+        x: jt.Float[jt.Array, "seq_len embed_dim"],
+        state: eqx.nn.State,
+        key,
+        inference,
+    ) -> tuple[jt.Array, eqx.nn.State]:
+        x = jnp.mean(x, axis=0)
+        x = self.mlp(x)
+        x = self.linear(x)
+        return x, state
+
+
+@flax.struct.dataclass
+class LossMetrics(clum.Collection):
+    loss: clum.Average.from_output("loss")
+    accuracy: clum.Average.from_output("accuracy")
+
+
+def loss_fn(
+    model: SimpleModel,
+    state: eqx.nn.State,
+    x: jt.Array,
+    y: jt.Array,
+    key: jt.PRNGKeyArray | None,
+    inference: bool,
+) -> tuple[jt.Array, tuple[jt.Array, eqx.nn.State]]:
+    if inference is False and key is not None:
+        keys = jax.random.split(key, x.shape[0])
+        in_axes = (0, None, 0, None)
+    else:
+        keys = key
+        in_axes = (0, None, None, None)
+
+    logits, state = eqx.filter_vmap(
+        model, in_axes=in_axes, out_axes=(0, None), axis_name="batch"
+    )(x, state, keys, inference)
+    return jnp.mean(optax.softmax_cross_entropy(logits=logits, labels=y)), (
+        logits,
+        state,
+    )
+
+
+@eqx.filter_jit
+def step_fn(
+    model: SimpleModel,
+    state: eqx.nn.State,
+    x: jt.Array,
+    y: jt.Array,
+    optimizer: optax.GradientTransformation,
+    opt_state: optax.OptState,
+    key: jt.PRNGKeyArray,
+) -> tuple[SimpleModel, eqx.nn.State, optax.OptState, dict]:
+    inference = False
+    (loss_value, (preds, state)), grads = eqx.filter_value_and_grad(
+        loss_fn, has_aux=True
+    )(model, state, x, y, key, inference)
+    updates, opt_state = optimizer.update(
+        grads, opt_state, eqx.filter(model, eqx.is_array)
+    )
+    model = eqx.apply_updates(model, updates)
+    predicted_classes = jnp.argmax(preds, axis=-1)
+    true_classes = jnp.argmax(y, axis=-1)
+    accuracy = jnp.mean(predicted_classes == true_classes)
+    metrics = {"loss": loss_value, "accuracy": accuracy}
+    return model, state, opt_state, metrics
+
+
+@eqx.filter_jit
+def eval_step(model: SimpleModel, state: eqx.nn.State, x: jt.Array, y: jt.Array):
+    key, inference = None, True
+    logits, state = eqx.filter_vmap(
+        model, in_axes=(0, None, None, None), out_axes=(0, None), axis_name="batch"
+    )(x, state, key, inference)
+    loss = jnp.mean(optax.softmax_cross_entropy(logits=logits, labels=y))
+    predicted_classes = jnp.argmax(logits, axis=-1)
+    true_classes = jnp.argmax(y, axis=-1)
+    correct_preds = jnp.sum(predicted_classes == true_classes)
+    return loss, correct_preds
+
+
+def eval_fn(model: SimpleModel, state: eqx.nn.State, loader):
+    total_loss = 0.0
+    total_correct = 0
+    total_samples = 0
+    for data in loader:
+        xs = []
+        for seq in data["sequence"]:
+            protein = ESMProtein(sequence=seq)
+            protein_tensor = ESM_CLIENT.encode(protein)
+            logits_output = ESM_CLIENT.logits(
+                protein_tensor,
+                LogitsConfig(sequence=True, return_embeddings=True),
+            )
+            assert logits_output.embeddings is not None
+            embedding = logits_output.embeddings.squeeze(1)
+            embedding = embedding.cpu().numpy()
+            xs.append(embedding)
+        x = torch.stack(xs)
+        x = jax.dlpack.from_dlpack(x)
+        y = data["label"]
+
+        num_samples = x.shape[0]
+        batch_loss, batch_correct = eval_step(model, state, x, y)
+        total_loss += batch_loss * num_samples
+        total_correct += batch_correct
+        total_samples += num_samples
+    if total_samples == 0:
+        return {"loss": float("inf"), "accuracy": 0.0}
+    avg_loss = total_loss / total_samples
+    accuracy = total_correct / total_samples
+    return {"loss": avg_loss, "accuracy": accuracy}
+
+
+def train(
+    n_epochs: int,
+    steps_per_epoch: int,
+    train_source,
+    test_source,
+    validation_source,
+    batch_size: int,
+    model: SimpleModel,
+    state: eqx.nn.State,
+    learning_rate: float,
+    max_protein_length: int,
+):
+    optimizer = optax.adam(learning_rate)
+    opt_state = optimizer.init(eqx.filter(model, eqx.is_array))
+    key = jax.random.key(12)
+
+    results_table = []
+
+    with mlflow.start_run(description=RUN_DESCRIPTION):
+        mlflow.log_params(
+            {
+                "learning_rate": learning_rate,
+                "batch_size": batch_size,
+                "n_epochs": n_epochs,
+                "model": str(model),
+                "max_protein_length": max_protein_length,
+            }
+        )
+
+        for epoch in range(n_epochs):
+            train_loader, test_loader, validation_loader = get_dataloaders(
+                train_source,
+                test_source,
+                validation_source,
+                epoch,
+                batch_size,
+                max_protein_length,
+            )
+
+            epoch_steps = 0
+            epoch_train_metrics = LossMetrics.empty()
+            pbar = tqdm(
+                train_loader,
+                total=steps_per_epoch,
+                desc=f"Epoch {epoch}",
+                leave=False,
+            )
+            for data in pbar:
+                xs = []
+                for seq in data["sequence"]:
+                    protein = ESMProtein(sequence=seq)
+                    protein_tensor = ESM_CLIENT.encode(protein)
+                    logits_output = ESM_CLIENT.logits(
+                        protein_tensor,
+                        LogitsConfig(sequence=True, return_embeddings=True),
+                    )
+                    assert logits_output.embeddings is not None
+                    embedding = logits_output.embeddings.squeeze(1).squeeze(0)
+                    xs.append(embedding)
+                x = torch.stack(xs)
+                x = jax.dlpack.from_dlpack(x)
+                y = data["label"]
+                key, step_key = jax.random.split(key)
+                model, state, opt_state, step_metrics = step_fn(
+                    model, state, x, y, optimizer, opt_state, step_key
+                )
+                epoch_train_metrics = epoch_train_metrics.merge(
+                    LossMetrics.single_from_model_output(
+                        loss=step_metrics["loss"], accuracy=step_metrics["accuracy"]
+                    )
+                )
+                epoch_steps += 1
+                computed_metrics = epoch_train_metrics.compute()
+                pbar.set_postfix(
+                    loss_and_acc=f"Loss: {computed_metrics['loss']:.4f}, Accuracy: {computed_metrics['accuracy']:.4f}"
+                )
+                if epoch_steps >= steps_per_epoch:
+                    break
+
+            epoch_eval_metrics = eval_fn(model, state, test_loader)
+            epoch_validation_metrics = eval_fn(model, state, validation_loader)
+
+            train_metrics = epoch_train_metrics.compute()
+
+            results_table.append(
+                [
+                    epoch,
+                    f"{float(train_metrics['loss']):.4f}",
+                    f"{float(train_metrics['accuracy']):.4f}",
+                    f"{float(epoch_eval_metrics['loss']):.4f}",
+                    f"{float(epoch_eval_metrics['accuracy']):.4f}",
+                    f"{float(epoch_validation_metrics['loss']):.4f}",
+                    f"{float(epoch_validation_metrics['accuracy']):.4f}",
+                ]
+            )
+
+            print(
+                "\n"
+                + tabulate(
+                    results_table,
+                    headers=[
+                        "Epoch",
+                        "Train Loss",
+                        "Train Acc",
+                        "Test Loss",
+                        "Test Acc",
+                        "Val Loss",
+                        "Val Acc",
+                    ],
+                    tablefmt="simple_grid",
+                )
+            )
+
+            mlflow.log_metrics(
+                {
+                    "train_loss": float(train_metrics["loss"]),
+                    "train_accuracy": float(train_metrics["accuracy"]),
+                    "test_loss": float(epoch_eval_metrics["loss"]),
+                    "test_accuracy": float(epoch_eval_metrics["accuracy"]),
+                    "validation_loss": float(epoch_validation_metrics["loss"]),
+                    "validation_accuracy": float(epoch_validation_metrics["accuracy"]),
+                },
+                step=epoch,
+            )
+
+    return model, opt_state
+
+
+def main():
+    print("Experiment:", RUN_DESCRIPTION)
+    experiment_name = "protein_solubility_classification"
+    experiment = mlflow.get_experiment_by_name(experiment_name)
+    if experiment:
+        experiment_id = experiment.experiment_id
+    else:
+        experiment_id = mlflow.create_experiment(experiment_name)
+    mlflow.set_experiment(experiment_id=experiment_id)
+    mlflow.enable_system_metrics_logging()
+
+    out_features = 2
+    esm_embedding_dim = 960
+    learning_rate = 3e-4
+    n_epochs = 50
+    batch_size = 128
+    percentile = 90
+
+    train_source, test_source, validation_source, max_protein_length = get_datasources(
+        percentile
+    )
+
+    dataset_size = len(train_source)
+    steps_per_epoch = dataset_size // batch_size
+
+    model, state = eqx.nn.make_with_state(SimpleModel)(
+        esm_embedding_dim,
+        out_features,
+        key=jax.random.key(42),
+    )
+
+    train(
+        n_epochs=n_epochs,
+        steps_per_epoch=steps_per_epoch,
+        train_source=train_source,
+        test_source=test_source,
+        validation_source=validation_source,
+        batch_size=batch_size,
+        model=model,
+        state=state,
+        learning_rate=learning_rate,
+        max_protein_length=max_protein_length,
+    )
+
+
+if __name__ == "__main__":
+    main()
+```
+
+
+Our model is pretty simple and it just gets the embeddings from the ESM model. Interestingly, as I was writing this, JAX has updated the implementation for the `dlpack` module. Now, it does **not** support dlpack capsules anymore. At first, I was annoyed by this, but it turns out, that the new way is much simpler: just pass the PyTorch tensor directly to the dlpack module, e.g.
+
+```python
+x = torch.stack(xs)
+x = jax.dlpack.from_dlpack(x)
+```
+
+And this is pretty neat!
+
+
+## Some Thoughts During the Training
+
+I actually played around with a couple of different architectures (e.g. I tried Mamba as an encoder model) and often I would get good performance on the training set, but it'd get pretty bad on the testing and validation data and start to overfit. The best I could do on test and validation was around 65% at most, which is just a bit better than randomly guessing. Turns out, protein solubility prediction is not as easy as I thought!
+
+I also got my hands on more proteins! I was initially using the proteins from the [proteina/solubility](hf://datasets/proteinea/solubility/) dataset from Huggingface, but then found more proteins from [PLM_Sol](https://github.com/Violet969/PLM_Sol), which gave me around 130K proteins in total. This is of course dwarfed by the millions of proteins that ESM used to train their models, but so is my wallet dwarfed when compared to theirs.
+
+I also tried out a bunch of other exotic approaches, so wild (and utterly useless) that they don't really need any mentioning. Suffice it to say, they were bad.
+
+But this blog post is getting pretty long and I will post the final training results as soon as it's done.
+
+## Closing Thoughts
+
+This was a fun exercise and I learned a TON: from using `grain` as a dataloader to sharing data between ML frameworks to predicting (albeit unsuccessfully) protein solubility. As an introduction, this was fantastic and pretty exciting!
