@@ -1131,6 +1131,8 @@ if __name__ == "__main__":
     main()
 ```
 
+</details>
+
 
 Our model is pretty simple and it just gets the embeddings from the ESM model. Interestingly, as I was writing this, JAX has updated the implementation for the `dlpack` module. Now, it does **not** support dlpack capsules anymore. At first, I was annoyed by this, but it turns out, that the new way is much simpler: just pass the PyTorch tensor directly to the dlpack module, e.g.
 
