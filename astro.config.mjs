@@ -12,7 +12,7 @@ export default defineConfig({
     remarkPlugins: [remarkMath],
     rehypePlugins: [rehypeKatex],
     shikiConfig: {
-      themes: { light: "min-light", dark: "night-owl" },
+      theme: "night-owl",
     },
   },
   vite: {
