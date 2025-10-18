@@ -22,3 +22,6 @@ pre {
 code {
     @apply w-full overflow-x-scroll;
 }
+.katex-display {
+    @apply overflow-x-scroll;
+}
