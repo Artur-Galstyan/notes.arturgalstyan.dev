@@ -6,9 +6,7 @@ date: 2025-09-07
 
 # Hello, Proteins!
 
-My goal for 2026 is to work at a biotech company that intersects with machine learning (if they let me of course). While language, image and video models are pretty cool (and they really are!), I think the best application for AI (until we discover AGI) is in drug discovery. And in the realm of drug discovery, proteins are **key**!
-
-So, if my goal is to work at a biotech company such as Isomorphic Labs, Cradle or (some department of) Roche, I won't just have to grind LeetCode (that part is inevitable), I'll also have to learn more about biology in general, and proteins in particular.
+While language, image and video models are pretty cool (and they really are!), I think one of the best application for AI (until we discover AGI) is in drug discovery. And in the realm of drug discovery, proteins are **key**!
 
 ## Proteins, TL;DR
 
