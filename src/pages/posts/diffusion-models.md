@@ -1,7 +1,7 @@
 
 ---
 layout: ../../layouts/PostLayout.astro
-title: Diffusion Models (DRAFT)
+title: Diffusion Models
 date: 2025-10-12
 ---
 
@@ -451,3 +451,497 @@ Which finally brings us to
 $$
 L = E_{t, X_0, \epsilon}[||\epsilon - \epsilon_\theta(X_t, t)||^2]
 $$
+
+
+## Code 
+
+Here's the entire code for diffusion models. Afterwards, I will highlight a few important aspects.
+
+```python
+from io import BytesIO
+
+import equinox as eqx
+import grain
+import jax
+import jax.numpy as jnp
+import matplotlib.pyplot as plt
+import numpy as np
+import optax
+from jaxtyping import Array, Float, Int, PRNGKeyArray
+from PIL import Image
+from tensorflow_datasets.core.file_adapters import pq
+from tqdm import tqdm
+
+from jaxonlayers.functions.embedding import sinusoidal_embedding
+
+batch_size = 2
+num_epochs = 20
+
+
+class DataFrameDataSource:
+    def __init__(self, data_list: list[dict]):
+        self._data = data_list
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+    def __getitem__(self, record_key: int) -> dict:
+        return self._data[record_key]
+
+
+class MNISTPreprocessor(grain.transforms.Map):
+    def map(self, element):
+        image_dict = element["image"]
+        label = element["label"]
+        image_bytes = image_dict["bytes"]
+        pil_image = Image.open(BytesIO(image_bytes))
+
+        image_array = np.array(pil_image, dtype=np.float32)
+        image_array = image_array / 255.0
+        width, height = image_array.shape
+        image_array = image_array.reshape(1, width, height)
+
+        return {
+            "image": jnp.array(image_array),
+            "label": jnp.array(label, dtype=jnp.int32),
+        }
+
+
+def load_mnist_from_hf(split="train"):
+    splits = {
+        "train": "mnist/train-00000-of-00001.parquet",
+        "test": "mnist/test-00000-of-00001.parquet",
+    }
+
+    url = "hf://datasets/ylecun/mnist/" + splits[split]
+    table = pq.read_table(url)
+    return table.to_pylist()
+
+
+train_data = load_mnist_from_hf("train")
+test_data = load_mnist_from_hf("test")
+
+train_source = DataFrameDataSource(train_data)
+test_source = DataFrameDataSource(test_data)
+
+transformations = [MNISTPreprocessor(), grain.transforms.Batch(batch_size=batch_size)]
+
+
+index_sampler = grain.samplers.IndexSampler(
+    num_records=len(train_source),
+    num_epochs=num_epochs,
+    shard_options=grain.sharding.ShardOptions(
+        shard_index=0, shard_count=1, drop_remainder=True
+    ),
+    shuffle=True,
+    seed=0,
+)
+
+data_loader = grain.DataLoader(
+    data_source=train_source,
+    operations=transformations,
+    sampler=index_sampler,
+    worker_count=0,
+)
+
+
+class ConvBlock(eqx.Module):
+    time_mlp: eqx.nn.Linear
+    conv1: eqx.nn.Conv2d
+    conv2: eqx.nn.Conv2d
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        time_embedding_size: int,
+        *,
+        key: PRNGKeyArray,
+    ):
+        key1, key2, key3 = jax.random.split(key, 3)
+        self.time_mlp = eqx.nn.Linear(time_embedding_size, out_channels, key=key1)
+        self.conv1 = eqx.nn.Conv2d(
+            in_channels, out_channels, kernel_size=3, padding=1, key=key2
+        )
+        self.conv2 = eqx.nn.Conv2d(
+            out_channels, out_channels, kernel_size=3, padding=1, key=key3
+        )
+
+    def __call__(
+        self,
+        x: Float[Array, "channel width height"],
+        t: Float[Array, "time_embedding_size"],
+    ) -> Float[Array, "channel width height"]:
+        h = self.conv1(x)
+        h = jax.nn.silu(h)
+
+        time_emb = self.time_mlp(t)
+        time_emb = jax.nn.silu(time_emb)
+        time_emb = time_emb[:, None, None]
+
+        h = h + time_emb
+
+        h = self.conv2(h)
+        h = jax.nn.silu(h)
+
+        return h
+
+
+class DiffusionModel(eqx.Module):
+    time_mlp: eqx.nn.MLP
+    time_embedding_size: int
+
+    initial_conv: eqx.nn.Conv2d
+
+    down1: ConvBlock
+    down2: ConvBlock
+    pool: eqx.nn.MaxPool2d
+
+    bottleneck: ConvBlock
+
+    up1: eqx.nn.ConvTranspose2d
+    up_conv1: ConvBlock
+    up2: eqx.nn.ConvTranspose2d
+    up_conv2: ConvBlock
+
+    final_conv: eqx.nn.Conv2d
+
+    def __init__(self, time_embedding_size: int, *, key: PRNGKeyArray):
+        self.time_embedding_size = time_embedding_size
+
+        keys = jax.random.split(key, 10)
+
+        self.initial_conv = eqx.nn.Conv2d(1, 32, kernel_size=3, padding=1, key=keys[0])
+
+        self.down1 = ConvBlock(32, 64, time_embedding_size, key=keys[1])
+        self.down2 = ConvBlock(64, 128, time_embedding_size, key=keys[2])
+        self.pool = eqx.nn.MaxPool2d(kernel_size=2, stride=2)
+
+        self.bottleneck = ConvBlock(128, 256, time_embedding_size, key=keys[3])
+
+        self.up1 = eqx.nn.ConvTranspose2d(
+            256, 128, kernel_size=2, stride=2, key=keys[4]
+        )
+        self.up_conv1 = ConvBlock(256, 128, time_embedding_size, key=keys[5])
+        self.up2 = eqx.nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2, key=keys[6])
+        self.up_conv2 = ConvBlock(128, 64, time_embedding_size, key=keys[7])
+
+        self.final_conv = eqx.nn.Conv2d(64, 1, kernel_size=1, key=keys[8])
+
+        self.time_mlp = eqx.nn.MLP(
+            in_size=time_embedding_size,
+            out_size=time_embedding_size,
+            width_size=time_embedding_size * 4,
+            depth=2,
+            key=keys[9],
+        )
+
+    def __call__(
+        self, x_t: Float[Array, "channel height width"], t: Int[Array, ""]
+    ) -> Float[Array, "channel height width"]:
+        time_embeddings = sinusoidal_embedding(t, self.time_embedding_size)
+        time = self.time_mlp(time_embeddings)
+
+        h = self.initial_conv(x_t)
+
+        skip1 = self.down1(h, time)
+        h = self.pool(skip1)
+
+        skip2 = self.down2(h, time)
+        h = self.pool(skip2)
+
+        h = self.bottleneck(h, time)
+
+        h = self.up1(h)
+        h = jnp.concatenate([h, skip2], axis=0)
+        h = self.up_conv1(h, time)
+
+        h = self.up2(h)
+        h = jnp.concatenate([h, skip1], axis=0)
+        h = self.up_conv2(h, time)
+
+        output = self.final_conv(h)
+        return output
+
+
+learning_rate = 1e-4
+time_embedding_size = 64
+timesteps = 400
+
+
+def linear_beta_schedule(timesteps):
+    scale = 1000 / timesteps
+    beta_start = scale * 0.0001
+    beta_end = scale * 0.02
+    return jnp.linspace(beta_start, beta_end, timesteps)
+
+
+betas = linear_beta_schedule(timesteps=timesteps)
+
+alphas = 1.0 - betas
+alpha_bars = jnp.cumprod(alphas, axis=0)
+
+sqrt_alpha_bars = jnp.sqrt(alpha_bars)
+sqrt_one_minus_alpha_bars = jnp.sqrt(1.0 - alpha_bars)
+
+print(betas[0], betas[-1], betas.shape)
+print(alphas[0], alphas[-1], alphas.shape)
+print(alpha_bars[0], alpha_bars[-1], alpha_bars.shape)
+print(sqrt_alpha_bars[0], sqrt_alpha_bars[-1], sqrt_alpha_bars.shape)
+print(
+    sqrt_one_minus_alpha_bars[0],
+    sqrt_one_minus_alpha_bars[-1],
+    sqrt_one_minus_alpha_bars.shape,
+)
+
+
+def loss_fn(
+    model: DiffusionModel,
+    x_0_batch: Float[Array, "batch channel height width"],
+    key: PRNGKeyArray,
+) -> Float[Array, ""]:
+    batch_size, *_ = x_0_batch.shape
+    keys = jax.random.split(key, batch_size)
+
+    def _create_x_t_batch(x_0, _key):
+        t_key, noise_key = jax.random.split(_key)
+        t = jax.random.randint(t_key, shape=(), minval=0, maxval=timesteps)
+        noise = jax.random.normal(noise_key, shape=x_0.shape)
+
+        sqrt_alpha_bar_t = sqrt_alpha_bars[t]
+        sqrt_one_minus_alpha_bar_t = sqrt_one_minus_alpha_bars[t]
+
+        x_t = sqrt_alpha_bar_t * x_0 + sqrt_one_minus_alpha_bar_t * noise
+        return x_t, noise, t
+
+    x_ts, noise, ts = eqx.filter_vmap(_create_x_t_batch)(x_0_batch, keys)
+    predicted_noise = eqx.filter_vmap(model)(x_ts, ts)
+    loss = jnp.mean((noise - predicted_noise) ** 2)
+    return loss
+
+
+@eqx.filter_jit
+def train_step(
+    model: DiffusionModel,
+    optimizer: optax.GradientTransformation,
+    opt_state: optax.OptState,
+    x_0_batch: Float[Array, "batch channel height width"],
+    key: PRNGKeyArray,
+):
+    loss_value, grads = eqx.filter_value_and_grad(loss_fn)(model, x_0_batch, key)
+    updates, opt_state = optimizer.update(
+        grads, opt_state, eqx.filter(model, eqx.is_array)
+    )
+    model = eqx.apply_updates(model, updates)
+    return model, opt_state, loss_value
+
+
+main_key = jax.random.key(42)
+
+
+def train():
+    model_key, train_key = jax.random.split(main_key)
+
+    model = DiffusionModel(time_embedding_size, key=model_key)
+    optimizer = optax.adam(learning_rate)
+
+    opt_state = optimizer.init(eqx.filter(model, eqx.is_array))
+
+    for epoch in range(num_epochs):
+        step = 0
+        total_loss = 0
+        with tqdm(data_loader, unit="batch") as tepoch:
+            tepoch.set_description(f"Epoch {epoch + 1}")
+            for batch in tepoch:
+                x_0_batch = batch["image"]
+                train_key, step_key = jax.random.split(train_key)
+                model, opt_state, loss = train_step(
+                    model, optimizer, opt_state, x_0_batch, step_key
+                )
+
+                total_loss += loss.item()
+                step += 1
+
+                if step % 10 == 0:
+                    avg_loss = total_loss / 100
+                    tepoch.set_postfix(loss=avg_loss)
+                    total_loss = 0
+
+
+def generate_images_with_steps(
+    model: DiffusionModel, num_images: int, key: PRNGKeyArray, save_every: int = 10
+):
+    generated_images = []
+    all_steps = []
+    keys = jax.random.split(key, num_images)
+
+    for i in range(num_images):
+        x_t = jax.random.normal(keys[i], shape=(1, 28, 28))
+        steps = []
+
+        for t in range(timesteps - 1, -1, -1):
+            if t % save_every == 0 or t == 0:
+                steps.append(x_t.copy())
+
+            predicted_noise = model(x_t, jnp.array(t))
+            alpha_t = alphas[t]
+            alpha_bar_t = alpha_bars[t]
+            beta_t = betas[t]
+
+            mean = (1.0 / jnp.sqrt(alpha_t)) * (
+                x_t - (beta_t / jnp.sqrt(1.0 - alpha_bar_t)) * predicted_noise
+            )
+
+            if t > 0:
+                noise_key = jax.random.fold_in(keys[i], t)
+                noise = jax.random.normal(noise_key, shape=x_t.shape)
+                x_t = mean + jnp.sqrt(beta_t) * noise
+            else:
+                x_t = mean
+
+        generated_images.append(x_t)
+        all_steps.append(steps)
+
+    return generated_images, all_steps
+
+
+def generate(model):
+    num_generated_images = 3
+    generation_key = jax.random.split(main_key, 1)[0]
+    generated_images, all_steps = generate_images_with_steps(
+        model, num_generated_images, generation_key, save_every=10
+    )
+
+    for img_idx in range(num_generated_images):
+        steps = all_steps[img_idx]
+        num_steps = len(steps)
+
+        fig, axes = plt.subplots(1, num_steps, figsize=(num_steps * 2, 2))
+
+        for step_idx, step_img in enumerate(steps):
+            display_img = np.clip(step_img[0], 0, 1)
+            axes[step_idx].imshow(display_img, cmap="gray")
+            timestep = (num_steps - step_idx - 1) * 10
+            axes[step_idx].set_title(f"t={timestep}")
+            axes[step_idx].axis("off")
+
+        plt.tight_layout()
+        plt.show()
+```
+
+
+### Important Bits 
+
+First, the code and the math are pretty close together (one of the rare occasions in ML). Look at the loss function:
+
+```python 
+def loss_fn(
+    model: DiffusionModel,
+    x_0_batch: Float[Array, "batch channel height width"],
+    key: PRNGKeyArray,
+) -> Float[Array, ""]:
+    batch_size, *_ = x_0_batch.shape
+    keys = jax.random.split(key, batch_size)
+
+    def _create_x_t_batch(x_0, _key):
+        t_key, noise_key = jax.random.split(_key)
+        t = jax.random.randint(t_key, shape=(), minval=0, maxval=timesteps)
+        noise = jax.random.normal(noise_key, shape=x_0.shape)
+
+        sqrt_alpha_bar_t = sqrt_alpha_bars[t]
+        sqrt_one_minus_alpha_bar_t = sqrt_one_minus_alpha_bars[t]
+
+        x_t = sqrt_alpha_bar_t * x_0 + sqrt_one_minus_alpha_bar_t * noise
+        return x_t, noise, t
+
+    x_ts, noise, ts = eqx.filter_vmap(_create_x_t_batch)(x_0_batch, keys)
+    predicted_noise = eqx.filter_vmap(model)(x_ts, ts)
+    loss = jnp.mean((noise - predicted_noise) ** 2)
+    return loss
+```
+
+Especially this part should be very familiar to you: 
+
+```python 
+        x_t = sqrt_alpha_bar_t * x_0 + sqrt_one_minus_alpha_bar_t * noise
+```
+
+This is exactly how we generated the noisy image from $x_0$. The objective of this loss function is to predict ALL the noise that was added to $x_0$ in order to get $x_t$. This is important to know to understand the image generation step: 
+
+```python 
+for i in range(num_images):
+    x_t = jax.random.normal(keys[i], shape=(1, 28, 28))
+    steps = []
+
+    for t in range(timesteps - 1, -1, -1):
+        if t % save_every == 0 or t == 0:
+            steps.append(x_t.copy())
+
+        predicted_noise = model(x_t, jnp.array(t))
+        alpha_t = alphas[t]
+        alpha_bar_t = alpha_bars[t]
+        beta_t = betas[t]
+
+        mean = (1.0 / jnp.sqrt(alpha_t)) * (
+            x_t - (beta_t / jnp.sqrt(1.0 - alpha_bar_t)) * predicted_noise
+        )
+
+        if t > 0:
+            noise_key = jax.random.fold_in(keys[i], t)
+            noise = jax.random.normal(noise_key, shape=x_t.shape)
+            x_t = mean + jnp.sqrt(beta_t) * noise
+        else:
+            x_t = mean
+```
+
+Look specifically at this part:
+
+```python
+mean = (1.0 / jnp.sqrt(alpha_t)) * (
+    x_t - (beta_t / jnp.sqrt(1.0 - alpha_bar_t)) * predicted_noise
+)
+
+if t > 0:
+    noise_key = jax.random.fold_in(keys[i], t)
+    noise = jax.random.normal(noise_key, shape=x_t.shape)
+    x_t = mean + jnp.sqrt(beta_t) * noise
+else:
+    x_t = mean
+```
+
+This might seem counterintuitive to you, after all, I told you that the reverse process is to subtract the bit of 
+noise that was added to $x_t$, so why do we:
+
+1) compute some mean? 
+2) add noise ??
+
+The reason is because of what our model predicts. Remember that our model predicts ALL the noise. If we simply did this 
+
+```
+x_t = x_t+1 - predicted_noise // wrong!
+```
+We wouldn't actually get $x_t$, but rather we would be jumping from $x_{t+1}$ directly to $x_0$. So instead, we need to only remove a tiny bit of the predicted noise, not everything at once.
+
+Furthermore, we are working with probabilistic models here and if we simply removed the noise directly (without adding in a tiny bit of variance), then we would too quickly collapse to the mean. We need to respect the variance as well.
+
+
+There is a whole 3 day workshop worth of math hidden behind this bit:
+
+
+```python
+mean = (1.0 / jnp.sqrt(alpha_t)) * (
+    x_t - (beta_t / jnp.sqrt(1.0 - alpha_bar_t)) * predicted_noise
+)
+
+if t > 0:
+    noise_key = jax.random.fold_in(keys[i], t)
+    noise = jax.random.normal(noise_key, shape=x_t.shape)
+    x_t = mean + jnp.sqrt(beta_t) * noise
+else:
+    x_t = mean
+```
+
+Which includes tedious algebra using Bayes' rule. To be honest, I haven't gotten around to REALLY understanding all that, so you'll have to excuse me for not deriving it here :(
+
+
+For now, I think this is enough on Diffusion models. See you in the next one :)
