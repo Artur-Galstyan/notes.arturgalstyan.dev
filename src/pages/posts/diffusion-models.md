@@ -5,7 +5,7 @@ title: Diffusion Models
 date: 2025-10-12
 ---
 
-# Diffusion Models (DRAFT)
+# Diffusion Models 
 
 The overarching goal of diffusion models is to predict the noise that was added to an image at any time between $t-1$ and $t$.
 
