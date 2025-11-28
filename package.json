@@ -11,6 +11,7 @@
   "dependencies": {
     "@astrojs/vercel": "^8.1.5",
     "@fontsource/fira-mono": "^5.2.6",
+    "@fontsource/vollkorn": "^5.0.9",
     "@tailwindcss/vite": "^4.1.8",
     "@vercel/analytics": "^1.5.0",
     "astro": "^5.8.2",
