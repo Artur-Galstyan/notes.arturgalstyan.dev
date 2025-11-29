@@ -25,3 +25,7 @@ code {
 .katex-display {
     @apply overflow-x-scroll;
 }
+
+img {
+    @apply rounded-xl;
+}
