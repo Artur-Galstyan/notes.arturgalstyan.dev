@@ -6,7 +6,7 @@ date: 2025-11-29
 
 # Happiness (From a Rabbit's Perspective) 
 
-This is more of a philosophical blog post and if that's what you were looking for, I'd suggest you skip this one.
+This is more of a philosophical blog post and if that's not what you were looking for, I'd suggest you skip this one.
 
 Some of my friends are now visiting the Philipines and as usual when they go traveling, they ask me to look after their pets. I never had any pets myself but I love animals, so when they ask me I usually say yes before even asking for the date or duration.
 
