@@ -84,3 +84,54 @@ $$
 	[0.33,0.33,0.33,0], [0.0, 1.0, 1.0, 1.5]
 $$
 Multiply and take the sum, the total is $~0.67$. This number contains the information from the original node ($0.0$), a bit of the first feature of node 2 ($0.33 * 1.0$), a bit of node 3 ($0.33*1.0$)  and none of node 4 ($0.0 * 1.5$) because it is not connected to that node 4. In a way, we collected the information of the neighbours of node 1 and put it all together into this single number. And by the way, this is also the reason, why this type of GNN is called a convolutional GNN, because we computed the convolution between our node and its neighbours using a fixed 'averaging' kernel defined by the graph structure.
+
+
+Okay, enough theory, let's start with some code. And for this exercise we will use `deepchem`, a library containing lots of exercises and datasets for you to begin your journey into computational biology.
+
+First, we import our usual suspects:
+```python
+import typing
+
+import deepchem as dc
+import equinox as eqx
+import jax
+import jax.numpy as jnp
+import optax
+from deepchem.data import DiskDataset
+from deepchem.models.graph_models import ConvMol
+from jaxtyping import Array, Float, Int, PRNGKeyArray, PyTree
+```
+And now we can explore our data a bit.
+
+```python
+tasks, datasets, transformers = dc.molnet.load_tox21(featurizer="GraphConv")
+print(tasks)
+
+
+train_dataset, valid_dataset, test_dataset = datasets
+train_dataset = typing.cast(DiskDataset, train_dataset)
+valid_dataset = typing.cast(DiskDataset, valid_dataset)
+test_dataset = typing.cast(DiskDataset, test_dataset)
+
+first = train_dataset.X[0]
+print(train_dataset.y.shape)
+first = typing.cast(ConvMol, first)
+print(first.get_adjacency_list())
+print(first.get_atom_features().shape)
+```
+
+Let's have a look at the output:
+
+```
+['NR-AR', 'NR-AR-LBD', 'NR-AhR', 'NR-Aromatase', 'NR-ER', 'NR-ER-LBD', 'NR-PPAR-gamma', 'SR-ARE', 'SR-ATAD5', 'SR-HSE', 'SR-MMP', 'SR-p53']
+(6258, 12)
+[0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0. 0.]
+[[9], [10], [10], [8], [8], [10], [9], [8], [9, 3, 4, 7], [0, 6, 8, 10], [9, 1, 2, 5]]
+(11, 75)
+```
+
+We can see that there are 12 tasks for this database. These are so called _assays_ for the `tox21` dataset. An assay is simply a test that measures whether something happens. E.g. you put some cells on a test plate, add some chemical and see what happens to the cell. In this case, we have binary outputs, so it could mean that the added chemical _activated_ the biological target (which can be a cell or protein, etc.).
+
+Furthermore, we can see that we have 6258 training points, and that this specific molecule has 11 atoms, each having 75 features. But this doesn't always need to be the case, the next atom could have 20 or even 120. So we need to set a `MAX_ATOMS` value that we are sure is greater than all the molecudes in our dataset and "pad" the molecules with these "ghost atoms" (which I mentioned before). This is required specifically for JAX, because in JAX-land, you mustn't have dynamic length inputs. We'll set `MAX_ATOMS = 150` which should be enough.
+
+We have to do a bit more work on the data, before we can get to the actual models.

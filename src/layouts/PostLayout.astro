@@ -1,7 +1,6 @@
 ---
 import Navbar from "../components/Navbar.astro";
 import "../styles/global.css";
-const { title } = Astro.props;
 import Analytics from "@vercel/analytics/astro";
 import "@fontsource/fira-mono";
 ---
@@ -12,7 +11,8 @@ import "@fontsource/fira-mono";
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
         <meta name="viewport" content="width=device-width" />
         <meta name="generator" content={Astro.generator} />
-        <title>{title}</title>
+        <title>{Astro.props.frontmatter.title}</title>
+        <meta property="og:title" content={Astro.props.frontmatter.title} />
         <link
             rel="stylesheet"
             href="https://cdn.jsdelivr.net/npm/katex@0.15.2/dist/katex.min.css"
@@ -29,6 +29,15 @@ import "@fontsource/fira-mono";
                 <slot />
             </article>
         </div>
+        <div class="h-[10rem]"></div>
+        <script
+            src="https://utteranc.es/client.js"
+            repo="Artur-Galstyan/notes.arturgalstyan.dev"
+            issue-term="og:title"
+            label="comment 💬"
+            theme="github-dark"
+            crossorigin="anonymous"
+            async></script>
         <div class="h-[25rem]"></div>
     </body>
 </html>
