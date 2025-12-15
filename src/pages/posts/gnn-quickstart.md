@@ -134,4 +134,97 @@ We can see that there are 12 tasks for this database. These are so called _assay
 
 Furthermore, we can see that we have 6258 training points, and that this specific molecule has 11 atoms, each having 75 features. But this doesn't always need to be the case, the next atom could have 20 or even 120. So we need to set a `MAX_ATOMS` value that we are sure is greater than all the molecudes in our dataset and "pad" the molecules with these "ghost atoms" (which I mentioned before). This is required specifically for JAX, because in JAX-land, you mustn't have dynamic length inputs. We'll set `MAX_ATOMS = 150` which should be enough.
 
-We have to do a bit more work on the data, before we can get to the actual models.
+We have to do a bit more work on the data, before we can get to the actual models. I'll show you the code first and then describe what's going in there:
+
+```python 
+def collate_batch(
+    batch_of_mols: list[ConvMol], in_size: int, max_atoms: int
+) -> tuple[
+    Float[Array, "batch_size max_atoms in_size"],
+    Float[Array, "batch_size max_atoms max_atoms"],
+    Float[Array, "batch_size max_atoms 1"],
+]:
+    batch_size = len(batch_of_mols)
+
+    batch_nodes = jnp.zeros((batch_size, max_atoms, in_size))
+    batch_adj = jnp.zeros((batch_size, max_atoms, max_atoms))
+    batch_mask = jnp.zeros((batch_size, max_atoms))
+
+    for i, mol in enumerate(batch_of_mols):
+        n_atoms = mol.get_num_atoms()
+        batch_nodes = batch_nodes.at[i, :n_atoms].set(mol.get_atom_features())
+
+        adj_matrix = jnp.zeros(shape=(max_atoms, max_atoms))
+        for j, atom in enumerate(mol.get_adjacency_list()):
+            adj_matrix = adj_matrix.at[j, atom].set(1)
+
+        A_tilde = adj_matrix + jnp.zeros_like(adj_matrix).at[:n_atoms, :n_atoms].set(
+            jnp.identity(n_atoms)
+        )
+        batch_adj = batch_adj.at[i].set(A_tilde)
+
+        batch_mask = batch_mask.at[i].set(
+            jnp.concat((jnp.ones(shape=(n_atoms)), jnp.zeros(max_atoms - n_atoms)))
+        )
+    batch_mask = jnp.expand_dims(batch_mask, axis=-1)
+
+    return batch_nodes, batch_adj, batch_mask
+```
+
+Ok, let's have a look at the first part:
+
+```python
+def collate_batch(
+    batch_of_mols: list[ConvMol], in_size: int, max_atoms: int
+) -> tuple[
+    Float[Array, "batch_size max_atoms in_size"],
+    Float[Array, "batch_size max_atoms max_atoms"],
+    Float[Array, "batch_size max_atoms 1"],
+]:
+    batch_size = len(batch_of_mols)
+
+    batch_nodes = jnp.zeros((batch_size, max_atoms, in_size))
+    batch_adj = jnp.zeros((batch_size, max_atoms, max_atoms))
+    batch_mask = jnp.zeros((batch_size, max_atoms))
+```
+
+This should be the simplest part. We get as input a batch of `ConvMol` which is the specific class in deepchem. The parameter `in_size` isn't actually strictly needed and we could infer it from the `batch_of_mols`, but it basically tells us how many features per atom there are (in this example its $75$) and `max_atoms` we just discussed earlier. We then create the 3 batch matrices that our model will get as input.
+
+But hold on, what's this `batch_mask`? We didn't cover that one yet, but it's purpose is to mask out all the ghost atoms that we pad later (e.g. when we use the linear layer or an activation function[^1]). Basically, when our GNN layer returns something, the parts that we added as ghost atoms must be 0 in the returned matrix, otherwise they would have "meaning" (but they shouldn't). So whatever we return, we multiply in the end by this mask.
+
+[^1]: Specifically, linear layers often add a bias term (e.g. +0.5). If we input a 0 from a ghost atom, it becomes 0 + 0.5 = 0.5. Suddenly, the ghost is alive. The mask kills it back to 0.
+
+
+```python 
+for i, mol in enumerate(batch_of_mols):
+    n_atoms = mol.get_num_atoms()
+    batch_nodes = batch_nodes.at[i, :n_atoms].set(mol.get_atom_features())
+``` 
+
+We then interate over all molecules and for each, we set the `i`th row to the features of the atoms, but only up to `n_atoms`, the remainder is still 0. 
+
+```python
+adj_matrix = jnp.zeros(shape=(max_atoms, max_atoms))
+for j, atom in enumerate(mol.get_adjacency_list()):
+    adj_matrix = adj_matrix.at[j, atom].set(1)
+
+A_tilde = adj_matrix + jnp.zeros_like(adj_matrix).at[:n_atoms, :n_atoms].set(
+    jnp.identity(n_atoms)
+)
+batch_adj = batch_adj.at[i].set(A_tilde)
+```
+
+Here, we constructed the adjacency matrix. In `A_tilde`, we add the diagonal (consisting of ones) BUT only up to `n_atoms` (which is this bit `.at[:n_atoms, :n_atoms]`), to make sure that the ghost atoms don't get a one in their diagonal (which would mean that they "exist" and point to themselves - but they don't).
+
+Lastly, we construct the mask and expand its last dimension so the broadcasting works as intended:
+
+```python 
+batch_mask = batch_mask.at[i].set(
+    jnp.concat((jnp.ones(shape=(n_atoms)), jnp.zeros(max_atoms - n_atoms)))
+)
+batch_mask = jnp.expand_dims(batch_mask, axis=-1)
+
+return batch_nodes, batch_adj, batch_mask
+```
+
+Also note again how we only have `jnp.ones` for `n_atoms` and `jnp.zeros` for the rest.
