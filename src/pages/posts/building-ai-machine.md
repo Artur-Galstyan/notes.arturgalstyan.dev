@@ -1,6 +1,6 @@
 ---
 layout: ../../layouts/PostLayout.astro
-title: Building an AI PC
+title: Building an AI PC (DRAFT)
 date: 2025-12-14
 ---
 

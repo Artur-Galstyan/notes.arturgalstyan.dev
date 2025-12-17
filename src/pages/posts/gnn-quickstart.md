@@ -227,4 +227,53 @@ batch_mask = jnp.expand_dims(batch_mask, axis=-1)
 return batch_nodes, batch_adj, batch_mask
 ```
 
-Also note again how we only have `jnp.ones` for `n_atoms` and `jnp.zeros` for the rest.
+Also note again how we only have `jnp.ones` for `n_atoms` and `jnp.zeros` for the rest. We expand the `batch_mask`'s last axis which we will require later for broadcasting.
+
+Ok, so from here, we're actually now ready to write our first GNN layer. Here it is:
+
+```python
+class GraphLayer(eqx.Module):
+    linear: eqx.nn.Linear
+
+    def __init__(self, in_size, out_size, key):
+        self.linear = eqx.nn.Linear(in_size, out_size, key=key)
+
+    def __call__(
+        self,
+        nodes: Float[Array, "max_atoms in_size"],
+        adj: Float[Array, "max_atoms max_atoms"],
+        mask: Float[Array, "max_atoms 1"],
+    ) -> Float[Array, "max_atoms out_size"]:
+        degree = jnp.sum(adj, axis=1, keepdims=True)
+
+        safe_degree = jnp.where(degree == 0, 1.0, degree)
+        norm_adj = adj / safe_degree
+
+        aggs = norm_adj @ nodes
+        weighted = eqx.filter_vmap(self.linear)(aggs)
+        return jax.nn.relu(weighted) * mask
+```
+
+Let's go over this code step by step. The linear layer contains the learnable parameters of this GNN layer. We also get the current nodes (remember, `in_size` is the feature size, i.e. 75 in our example) and `adj` and `mask` are the adjacency matrix and the mask that we contructed in the `collate_batch` function respectively.
+
+
+This bit:
+```python 
+degree = jnp.sum(adj, axis=1, keepdims=True)
+
+safe_degree = jnp.where(degree == 0, 1.0, degree)
+norm_adj = adj / safe_degree
+
+aggs = norm_adj @ nodes
+```
+
+I already covered earlier, if you recall, this was required for situations in which one node had 1000 neighbours while another one had just 1 and we need to normalise the adjacency matrix. The `safe_degree` is required so we don't accidentally divide by 0 (which can happen due to the ghost atoms).
+
+These last 2 lines:
+
+```python 
+weighted = eqx.filter_vmap(self.linear)(aggs)
+return jax.nn.relu(weighted) * mask
+```
+
+Simply apply the linear layer on the aggregated matrix. In the end, we multiply everything by the mask, which is required because our linear layer uses a bias term which would give the ghost atoms "meaning" again. By multiplying it with the mask, we make sure that ghost atoms remain 0 throughout the network.
