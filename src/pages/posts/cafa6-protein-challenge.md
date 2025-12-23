@@ -158,3 +158,224 @@ is_a: GO:0008150 ! biological_process
 Which basically means "something that does something with a cell". Needless, to say, the weight is pretty low for this one (`GO:0008510	0.0`), so don't expect a pad on the shoulder if you predict it. (It actually tells you so in the description: _It should be possible to make a more specific annotation to one of the children of this term._)
 
 This means that the further away we are from the root (in general), the more specific our prediction is (and thus more useful). Note, that a protein can (and usually has) multiple GO terms and GO terms can (and often have) multiple parents.
+
+## Scraping Kaggle Discussions
+
+One thing you should definitely take advantage of is all the data in the _discussion_ tab, but usually, there is a lot. Historically, you would just browser through these, pick out the few with the most upvotes, read them and gain some insight. But it's 2025 and the year of LLMs, and we can make this process a bit more efficient.
+
+For that purpose, I wrote a little script that would browse through all the discussions and save them locally. I could then use those, pass them into my LLM of choice and ask it nicely to summarise the whole thing for me.
+
+This is the script I wrote:
+
+<details>
+<summary> Toggle me, if you're curious </summary>
+
+```python 
+import os
+import re
+from typing import cast
+
+from fire import Fire
+from playwright.sync_api import sync_playwright
+
+BASE_URL = "https://www.kaggle.com/competitions"
+TABS: list[str] = [
+    "overview",
+    "code",
+    "data",
+    "discussion",
+]
+
+
+def _get_notebook_code(page) -> str:
+    iframe_selector = "#rendered-kernel-content"
+    try:
+        page.wait_for_selector(iframe_selector, timeout=30000)
+
+        frame = page.frame_locator(iframe_selector)
+
+        frame.locator("body").wait_for(timeout=30000)
+
+        code_cells = frame.locator(".jp-InputArea")
+
+        if code_cells.count() == 0:
+            code_cells = frame.locator(".code-pane, pre")
+
+        if code_cells.count() > 0:
+            return "\n\n# -------------------- CELL --------------------\n".join(
+                code_cells.all_text_contents()
+            )
+
+        return "# No code content found (empty or unknown format)"
+
+    except Exception as e:
+        print(f"Error extracting code: {e}")
+        return ""
+
+
+def _get_all_texts(text_elements_container) -> str:
+    elements = text_elements_container.locator("h1, h2, h3, h4, h5, h6, p")
+
+    all_text = []
+    for el in elements.all():
+        text = el.text_content()
+        if text:
+            all_text.append(text.strip())
+
+    combined_content = "\n".join(all_text)
+    combined_content = cast(str, combined_content)
+    return combined_content
+
+
+def scrape(competition_name: str):
+    os.makedirs(competition_name, exist_ok=True)
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+
+        for tab in TABS:
+            url = f"{BASE_URL}/{competition_name}/{tab}"
+            if tab == "overview":
+                page.goto(url)
+                combined_content = _get_all_texts(page)
+                with open(f"{competition_name}/{tab}", "wb") as f:
+                    f.write(combined_content.encode("utf-8"))
+            elif tab == "code":
+                url += "?sortBy=voteCount&excludeNonAccessedDatasources=true"
+                page.goto(url)
+
+                code_container = page.get_by_test_id(
+                    "competition-detail-code-tab-render-tid"
+                )
+                list_selector = code_container.locator("ul.MuiList-root.km-list")
+                list_selector.wait_for()
+
+                last_count = 0
+                while True:
+                    items = list_selector.locator("li")
+                    current_count = items.count()
+
+                    if current_count == last_count:
+                        break
+
+                    print(f"Loaded {current_count} notebooks so far...")
+                    items.nth(current_count - 1).scroll_into_view_if_needed()
+                    last_count = current_count
+                    page.wait_for_timeout(3000)
+
+                notebook_urls = []
+                for i in range(current_count):
+                    item = items.nth(i)
+                    comment_link = item.locator("a[href*='/comments']").first
+
+                    if comment_link.count() > 0:
+                        full_url = comment_link.get_attribute("href")
+                        clean_url = full_url.replace("/comments", "")
+                        notebook_urls.append(f"https://www.kaggle.com{clean_url}")
+
+                print(f"Found {len(notebook_urls)} notebooks. Scraping content...")
+
+                for nb_url in notebook_urls:
+                    print(f"Processing: {nb_url}")
+                    try:
+                        page.goto(nb_url)
+                        page.wait_for_load_state("domcontentloaded")
+
+                        code_content = _get_notebook_code(page)
+
+                        if code_content:
+                            slug = nb_url.split("/")[-1]
+                            with open(
+                                f"{competition_name}/notebooks-{slug}", "wb"
+                            ) as f:
+                                f.write(code_content.encode("utf-8"))
+                    except Exception as e:
+                        print(f"Failed {nb_url}: {e}")
+
+            elif tab == "discussion":
+                url += "?sort=votes"
+                page.goto(url)
+
+                while True:
+                    next_page_button = page.get_by_role(
+                        "button", name="Go to next page"
+                    )
+                    list_items = page.locator("ul.MuiList-root.km-list > li")
+                    list_items.first.wait_for()
+                    for item in list_items.all():
+                        link = item.locator("a[role='link']")
+                        topic_url = link.get_attribute("href")
+                        if topic_url:
+                            matches = re.search(
+                                pattern=r"(?<=discussion\/)\d+", string=topic_url
+                            )
+                            if matches:
+                                discussion_url = f"{BASE_URL}/{competition_name}/{tab}/{matches.group()}"
+                                page.goto(discussion_url)
+                                page.wait_for_load_state("networkidle")
+
+                                text_elements_container = page.get_by_test_id(
+                                    "discussion-detail-render-tid"
+                                )
+                                combined_content = _get_all_texts(
+                                    text_elements_container
+                                )
+
+                                with open(
+                                    f"{competition_name}/{tab}-{matches.group()}", "wb"
+                                ) as f:
+                                    f.write(combined_content.encode("utf-8"))
+
+                                page.go_back()
+
+                    if next_page_button.is_visible() and next_page_button.is_enabled():
+                        next_page_button.click()
+                        page.wait_for_load_state("networkidle")
+                    else:
+                        break
+
+            elif tab == "data":
+                page.goto(url)
+                page.wait_for_load_state("networkidle")
+                combined_content = _get_all_texts(page)
+                with open(f"{competition_name}/{tab}", "wb") as f:
+                    f.write(combined_content.encode("utf-8"))
+
+
+if __name__ == "__main__":
+    # competition_name = "cafa-6-protein-function-prediction"
+    Fire(scrape)
+```
+
+</details>
+
+
+Afterwards, it's just a matter of running this command
+
+```bash 
+cat cafa-6-protein-function-prediction/discussion-* | pbcopy
+```
+
+and pasting it into an LLM and ask it to summarise it.
+
+## Training a Model 
+
+OK. We have some idea about what this challenge is about, we looked through the data and now, I believe, we are ready to create some models. Let's brainstorm a few ideas. 
+
+For one, we have protein sequences. Proteins are 3D objects, but the sequences are 1D strings. Their properties come from their shape! Shape is EVERYTHING in cellular biology. Problem is: we can't just easily infer the shape given the string. We CAN use ESM-Fold or AlphaFold to generate them. But given that I have just 1 underpaid GPU and the challenge is only running for a couple of weeks, this option is not valid. It'd take me months to generate all the structures I'd need and even then it's not guaranteed that I could use them effectively in the model.
+
+So instead, we use plan B: embeddings! Luckily, there are a couple of models on the market that can generate rich embedding vecotrs for a given protein sequence. Those embeddings contain lots of information about the protein and they are a helpful shortcut to getting meaningful features out of the protein sequences.
+
+Two encoders I know of are ESM-C 300 (and 600)M and Prot-T5. Both models are available online and you can easily download and use them.
+
+So the first thing I did was to compute all the embeddings for all the proteins in the training data. I stored them in `float16` because I need my money for food and have non left for storage.
+
+I also saved them in 2 ways: one where I store them "raw" and another is where I store their "mean" across the sequence length dimension. Here's an example:
+
+Suppose you have a protein that is 50 amino acids long. You use ESM-C 600M. The model will output a matrix of shape $50 \times 1154$, where 50 is the sequence length and 1154 is the embedding dimension of ESM-C. Another protein might have a difference sequence length, thus a differently shaped matrix. In JAX land, remember, we MUST NOT HAVE dynamically shaped input matrices. So we have three options:
+
+1) disregard everything and pass dynamic shapes in anyway and cry as your model recompiles for every shape (bad idea)
+2) set a max sequence length and truncate/pad all the proteins (good idea)
+3) compute the mean across `axis=0` (also good idea)
+
+Having stored the raw embeddings (with the variable sequence lengths) alongside the mean ones, gives us the option to pursue also option 2). I repeated the process for the `Rostlab/prot_t5_xl_half_uniref50-enc` model (which I will henceforth abbreviate as just `prot_t5`). This process used up some 200GB of disk space. Oof.
