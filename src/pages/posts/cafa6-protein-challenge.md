@@ -356,6 +356,47 @@ cat cafa-6-protein-function-prediction/discussion-* | pbcopy
 
 and pasting it into an LLM and ask it to summarise it.
 
+
+## Standing on the Shoulders of Giants 
+
+There is nothing new under the sun. And as such, this problem isn't new either. Smart people sat down and tackled this problem and one result of this is the [DeepGO-SE model](https://www.biorxiv.org/content/10.1101/2023.09.26.559473v1). This model - given a protein sequence - predicts their GO terms. Pretty much exactly what we are looking for. 
+
+This model embeds the protein sequence using ESM2 (we're using `ESM-C` later) and projects those embeddings (of size 2560) and mean pool those and then project it into a different embedding space (let's call this just $d$) using a simple MLP. In the end, you just have a vector $d$. 
+
+Then they said: each GO term is a "ball" in the $d$ dimensional vector space and it has a radius. If my protein falls e.g. into the "kinase activity ball", then it likely has that GO term. The real kicker is that they enforce the GO graph structure (because GO is a DAG, a directed, acyclic graph), so this $d$ dimensional vector space in which these balls reside MUST follow the same GO term rules. 
+
+This means that the "kinase activity ball" must be in the "catalytic ball". From this we can infer that the protein has both of those GO terms. They enforce this behaviour through their loss function. The model basically looks like this
+
+```python 
+class GOTermModel(eqx.Module):
+    centers: eqx.nn.Embedding   # (n_go_terms, d)
+    radii: eqx.nn.Embedding     # (n_go_terms, 1)
+    relation: Array             # (d,)
+```
+
+And the loss function is essentially this 
+
+```
+score = sigmoid(protein_vec · (relation + center) + radius)
+
+prediction_loss = binary_cross_entropy(score, label)
+total_loss = prediction_loss + λ * axiom_loss
+```
+
+The axiom loss is computed based on the output of the `GOTermModel`. They loop over each axiom (pairs of GO terms) and check if those pairs satisfy the GO term constraints and if not they get whacked with a loss which is balanced with the lambda term. This way they force the embeddings to follow the GO term structure, otherwise they will suffer a penalty.
+
+Lastly, they train N different versions of this with different initial values. Each of those is "valid" and the more models say that a protein falls into a particular ball, the more likely it is that it is true.
+
+This is actually pretty cool and we could train our own version of this another day, but for now, we will just use this.
+
+The first thing we will do is let this model run over all sequences in the test superset and we will submit this directly without any modifications. This will give us both a ceiling and a floor if we use this as an "arm" in our ensemble. The ceiling is: DeepGO-SE without modifications will be at least _X_ good and the floor is: DeepGO-SE should not get worse than _X_ if we add other arms.
+
+I ran this model over 100 sequences and it took around 35 seconds. Some napkin math tells us that - because we have roughly 240k protein sequences, that the whole generation will take around 24 hours. So I split the test set into 24 batches, one for every hour and let my PC generate all the sequences over night. I did this to make sure that it wouldn't crash in the middle and then I'd have to start again. 
+
+Ok so, now we wait and watch our electricity bills and the room temperature rise. We will submit this once it's done.
+
+In the meantime...
+
 ## Training a Model 
 
 OK. We have some idea about what this challenge is about, we looked through the data and now, I believe, we are ready to create some models. Let's brainstorm a few ideas. 
