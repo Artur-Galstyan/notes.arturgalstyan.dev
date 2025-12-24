@@ -361,6 +361,8 @@ and pasting it into an LLM and ask it to summarise it.
 
 There is nothing new under the sun. And as such, this problem isn't new either. Smart people sat down and tackled this problem and one result of this is the [DeepGO-SE model](https://www.biorxiv.org/content/10.1101/2023.09.26.559473v1). This model - given a protein sequence - predicts their GO terms. Pretty much exactly what we are looking for. 
 
+A quick chat with Mr. Claude helped me understand what this model does:
+
 This model embeds the protein sequence using ESM2 (we're using `ESM-C` later) and projects those embeddings (of size 2560) and mean pool those and then project it into a different embedding space (let's call this just $d$) using a simple MLP. In the end, you just have a vector $d$. 
 
 Then they said: each GO term is a "ball" in the $d$ dimensional vector space and it has a radius. If my protein falls e.g. into the "kinase activity ball", then it likely has that GO term. The real kicker is that they enforce the GO graph structure (because GO is a DAG, a directed, acyclic graph), so this $d$ dimensional vector space in which these balls reside MUST follow the same GO term rules. 
