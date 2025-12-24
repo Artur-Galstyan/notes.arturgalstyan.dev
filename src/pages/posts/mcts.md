@@ -4,8 +4,6 @@ title: Monte-Carlo Tree Search
 date: 2025-07-27
 ---
 
-# Monte-Carlo Tree Search
-
 Monte-Carlo Tree Search (MCTS) is an incredible planning algorithm that was successfully used in AlphaGo a couple of years (almost a decade ago), which was responsible for beating expert humans in the game of Go.
 
 In this post, we will cover and implement a simple and modular library for MCTS.

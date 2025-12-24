@@ -4,8 +4,6 @@ title: Graph Neural Netwroks - Quickstart
 date: 2025-12-07
 ---
 
-# Graph Neural Netwroks - Quickstart
-
 Many things in life can be represented easily as graphs. One classical example would be a social network, where nodes are people and edges between the nodes represent some kind of connection, like friendship for example. Here's a simple example of a graph.
 
 ![image](../../assets/simple-graph.png)

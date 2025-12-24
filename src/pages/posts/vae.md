@@ -4,8 +4,6 @@ title: Variational Autoencoder
 date: 2025-06-01
 ---
 
-# Variational Autoencoder
-
 The Variational Autoencoder (VAE) is the successor to the regular autoencoder (AE). As you probably already know, a regular AE is a neural network that compresses its input to a latent space and then reconstructs the orignal input from that latent space. In drawings, you would often find something like this:
 
 ![Standard Autoencoder](/posts/vae/autoencoder.png)

@@ -4,8 +4,6 @@ title: Building an AI PC (DRAFT)
 date: 2025-12-14
 ---
 
-# Building an AI PC (DRAFT)
-
 If you want to develop ML models, you have a few options, depending on the kind of models that you want to develop. Do you want to train LLMs (emphasis on the first "L")? Yes? Ok, are you incredibly rich ($>20m$ net worth)? Yes? Then you can go to NVIDIA and tell them to make you a 8x H200 server and send it to your home. You'll need to call your electrician though in order to turn the thing on. 
 
 You aren't rich and still want to work on cutting edge, very large LLMs? I'd say, give up. This isn't a game meant to be played by the average mortal. You won't be able to afford the GPU costs to significantly move the needle in the LLM space. 

@@ -10,21 +10,34 @@ const sortedPosts = posts.sort(
 ---
 
 <Layout>
-    <ul class="list-disc">
+    <div class="space-y-6 max-w-4xl mx-auto flex flex-col">
         {
             sortedPosts.map((post: any) => (
-                <li class="mb-4">
-                    <a
-                        class="text-blue-500 hover:text-blue-700"
-                        href={post.url}
-                    >
-                        {post.frontmatter.title}
-                    </a>{" "}
-                    <span class="text-gray-500">
-                        {new Date(post.frontmatter.date).toLocaleDateString()}
-                    </span>
-                </li>
+                <div class="flex justify-center w-full">
+                    <div class="card bg-base-100 w-96 md:w-2/3 shadow-sm p-4">
+                        <a href={post.url}>
+                            <div class="card-body">
+                                <h2 class="card-title">
+                                    {post.frontmatter.title}
+                                </h2>
+                                <p>{post.frontmatter.description}</p>
+                            </div>
+                            <time
+                                datetime={post.frontmatter.date}
+                                class="text-sm md:text-base text-base-content/50 font-mono whitespace-nowrap"
+                            >
+                                {new Date(
+                                    post.frontmatter.date,
+                                ).toLocaleDateString("en-US", {
+                                    year: "numeric",
+                                    month: "short",
+                                    day: "numeric",
+                                })}
+                            </time>
+                        </a>
+                    </div>
+                </div>
             ))
         }
-    </ul>
+    </div>
 </Layout>

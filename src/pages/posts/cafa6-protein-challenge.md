@@ -1,10 +1,8 @@
 ---
 layout: ../../layouts/PostLayout.astro
-title: Kaggle Competition CAFA 6 Protein Function Prediction (DRAFT)
+title: Kaggle Competition CAFA 6 - Protein Function Prediction (DRAFT)
 date: 2025-12-22
 ---
-
-# Kaggle Competition: CAFA 6 Protein Function Prediction (DRAFT)
 
 One afternoon, I was very bored and browsed through Kaggle competitions, unsure as to why because I don't actually participate in Kaggle competitions. But there I spotted the CAFA 6 challenge in which you have to predict functions of proteins. 
 

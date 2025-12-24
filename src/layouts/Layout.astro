@@ -3,23 +3,23 @@ import "../styles/global.css";
 import Navbar from "../components/Navbar.astro";
 import Analytics from "@vercel/analytics/astro";
 import "@fontsource/fira-mono";
+import Base from "../layouts/Base.astro";
 ---
 
-<html lang="en" data-theme="dark">
-    <head>
-        <meta charset="utf-8" />
+<Base>
+    <Fragment slot="head">
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
         <meta name="viewport" content="width=device-width" />
         <meta name="generator" content={Astro.generator} />
         <title>Artur's Notes</title>
         <Analytics />
-    </head>
-    <body class="bg-base-100 text-base-content">
-        <div class="mx-auto px-4 py-8 w-full">
+    </Fragment>
+    <body class="text-base-content min-h-screen">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             <Navbar />
         </div>
-        <div class="container mx-auto w-2/3">
+        <main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
             <slot />
-        </div>
+        </main>
     </body>
-</html>
+</Base>

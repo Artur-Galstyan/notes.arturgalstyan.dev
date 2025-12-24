@@ -3,11 +3,11 @@ import Navbar from "../components/Navbar.astro";
 import "../styles/global.css";
 import Analytics from "@vercel/analytics/astro";
 import "@fontsource/fira-mono";
+import Base from "../layouts/Base.astro";
 ---
 
-<html lang="en" data-theme="dark">
-    <head>
-        <meta charset="utf-8" />
+<Base>
+    <Fragment slot="head">
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
         <meta name="viewport" content="width=device-width" />
         <meta name="generator" content={Astro.generator} />
@@ -18,26 +18,64 @@ import "@fontsource/fira-mono";
             href="https://cdn.jsdelivr.net/npm/katex@0.15.2/dist/katex.min.css"
         />
         <Analytics />
-    </head>
+    </Fragment>
 
-    <body class="bg-base-100 text-base-content">
-        <div class="mx-auto px-4 py-8 w-full">
+    <body class="bg-base-100 text-base-content min-h-screen">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             <Navbar />
         </div>
-        <div class="flex justify-center w-[90%] mx-auto">
-            <article class="prose w-full">
+
+        <!-- Article Header -->
+        <header class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 mb-12">
+            <h1
+                class="text-3xl md:text-4xl lg:text-5xl font-bold mb-4 text-center"
+            >
+                {Astro.props.frontmatter.title}
+            </h1>
+            {
+                Astro.props.frontmatter.date && (
+                    <time
+                        datetime={Astro.props.frontmatter.date}
+                        class="block text-center text-base-content/60 text-sm md:text-base font-mono"
+                    >
+                        {new Date(
+                            Astro.props.frontmatter.date,
+                        ).toLocaleDateString("en-US", {
+                            year: "numeric",
+                            month: "long",
+                            day: "numeric",
+                        })}
+                    </time>
+                )
+            }
+        </header>
+
+        <!-- Article Content -->
+        <main class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+            <article
+                class="prose prose-invert max-w-none prose-lg prose-headings:font-bold prose-a:text-blue-400 prose-a:no-underline hover:prose-a:text-blue-300 prose-pre:bg-base-300/50 prose-pre:border prose-pre:border-base-300/50 prose-code:text-blue-300 prose-img:rounded-xl prose-img:shadow-2xl"
+            >
                 <slot />
             </article>
-        </div>
-        <div class="h-[10rem]"></div>
-        <script
-            src="https://utteranc.es/client.js"
-            repo="Artur-Galstyan/notes.arturgalstyan.dev"
-            issue-term="og:title"
-            label="comment 💬"
-            theme="github-dark"
-            crossorigin="anonymous"
-            async></script>
-        <div class="h-[25rem]"></div>
+        </main>
+
+        <!-- Comments Section -->
+        <section class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 mt-20 mb-12">
+            <h2 class="text-2xl font-bold mb-6 text-base-content">
+                💬 Comments
+            </h2>
+            <div class="utterances-container">
+                <script
+                    src="https://utteranc.es/client.js"
+                    repo="Artur-Galstyan/notes.arturgalstyan.dev"
+                    issue-term="og:title"
+                    label="comment 💬"
+                    theme="github-light"
+                    crossorigin="anonymous"
+                    async></script>
+            </div>
+        </section>
+
+        <div class="h-20"></div>
     </body>
-</html>
+</Base>

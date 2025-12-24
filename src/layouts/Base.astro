@@ -1,0 +1,19 @@
+---
+import "../styles/global.css";
+import "@fontsource/fira-mono";
+import { ClientRouter } from "astro:transitions";
+import { fade } from "astro:transitions";
+---
+
+<html
+    lang="en"
+    data-theme="emerald"
+    transition:animate={fade({ duration: "0.3s" })}
+>
+    <head>
+        <meta charset="utf-8" />
+        <ClientRouter />
+        <slot name="head" />
+    </head>
+    <slot />
+</html>

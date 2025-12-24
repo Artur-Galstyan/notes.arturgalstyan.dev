@@ -4,8 +4,6 @@ title: Happiness (From a Rabbit's Perspective)
 date: 2025-11-29
 ---
 
-# Happiness (From a Rabbit's Perspective) 
-
 This is more of a philosophical blog post and if that's not what you were looking for, I'd suggest you skip this one.
 
 Some of my friends are now visiting the Philipines and as usual when they go traveling, they ask me to look after their pets. I never had any pets myself but I love animals, so when they ask me I usually say yes before even asking for the date or duration.
@@ -81,6 +79,6 @@ And by the way, here are the two cats:
 
 
 <div class="flex w-full justify-between">
-<img class="w-[40%]" src="happiness/lio.webp"></img>
-<img class="w-[40%]" src="happiness/milow.webp"></img>
+<img class="w-[40%]" src="/lio.webp"></img>
+<img class="w-[40%]" src="/milow.webp"></img>
 </div>

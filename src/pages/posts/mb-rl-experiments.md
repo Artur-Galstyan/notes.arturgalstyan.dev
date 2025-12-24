@@ -4,8 +4,6 @@ title: Model-Based Reinforcement Learning Experiments
 date: 2025-04-22
 ---
 
-# Model-Based Reinforcement Learning
-
 Model-Based Reinforcement Learning (MBRL) is one of my favourite areas in machine learning in general. IMO, MBRL is likely going to be integral to finding AGI one day, because I believe that AGI (and intelligence in general) is simply a matter of _goal oriented next-state prediction_. I will leave this simply as an opinion and showcase my arguments for this at another time, because in this post, it's all about coding MBRL.
 
 Btw. this is __not__ a tutorial, but rather a workthrough of MBRL and some of the issues encountered along the way.

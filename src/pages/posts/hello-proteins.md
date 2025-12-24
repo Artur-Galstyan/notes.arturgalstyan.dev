@@ -4,8 +4,6 @@ title: Hello, Proteins!
 date: 2025-09-07
 ---
 
-# Hello, Proteins!
-
 While language, image and video models are pretty cool (and they really are!), I think one of the best application for AI (until we discover AGI) is in drug discovery. And in the realm of drug discovery, proteins are **key**!
 
 ## Proteins, TL;DR

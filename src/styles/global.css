@@ -1,31 +1,87 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
-@plugin "daisyui";
+@plugin "daisyui" {
+    themes: all;
+}
 
 body {
     font-family: "Fira Mono", monospace;
 }
 
+img {
+    @apply bg-black;
+}
+
+/* Enhanced Typography */
 article > p {
-    @apply text-justify;
+    @apply text-justify leading-loose mb-6;
 }
 
 article > h1,
 h2,
 h3 {
-    @apply text-center;
+    @apply text-center font-bold tracking-tight;
 }
 
+article > h1 {
+    @apply mb-8 mt-12 text-4xl;
+}
+
+article > h2 {
+    @apply mb-6 mt-10 text-3xl;
+}
+
+article > h3 {
+    @apply mb-4 mt-8 text-2xl;
+}
+
+/* Enhanced Code Blocks */
 pre {
-    @apply w-full overflow-x-scroll;
-}
-code {
-    @apply w-full overflow-x-scroll;
-}
-.katex-display {
-    @apply overflow-x-scroll;
+    @apply w-full overflow-x-scroll rounded-lg p-4 shadow-lg border border-base-300/50;
 }
 
+code {
+    @apply rounded px-1.5 py-0.5 bg-base-300/50  text-base-content;
+}
+
+pre code {
+    @apply bg-transparent p-0 text-base-content;
+}
+
+/* Math rendering */
+.katex-display {
+    @apply overflow-x-scroll py-4;
+}
+
+/* Images with subtle effects */
 img {
-    @apply rounded-xl;
+    @apply rounded-xl my-8 mx-auto;
+}
+
+/* Blockquotes */
+article blockquote {
+    @apply border-l-4 border-blue-500/50 pl-6 py-2 my-6 italic text-base-content/80 bg-base-200/30 rounded-r-lg;
+}
+
+/* Horizontal rules */
+article hr {
+    @apply my-12 border-base-300/50;
+}
+
+/* Selection */
+::selection {
+    @apply bg-blue-500/30;
+}
+
+/* Scrollbar styling for webkit browsers */
+::-webkit-scrollbar {
+    @apply w-2 h-2;
+}
+
+::-webkit-scrollbar-track {
+    @apply bg-base-200;
+}
+
+::-webkit-scrollbar-thumb {
+    @apply bg-base-300 rounded-full hover:bg-base-content/30;
 }
