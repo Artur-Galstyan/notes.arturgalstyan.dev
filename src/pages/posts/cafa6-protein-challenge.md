@@ -391,7 +391,7 @@ Lastly, they train N different versions of this with different initial values. E
 
 This is actually pretty cool and we could train our own version of this another day, but for now, we will just use this.
 
-The first thing we will do is let this model run over all sequences in the test superset and we will submit this directly without any modifications. This will give us both a ceiling and a floor if we use this as an "arm" in our ensemble. The ceiling is: DeepGO-SE without modifications will be at least _X_ good and the floor is: DeepGO-SE should not get worse than _X_ if we add other arms.
+The first thing we will do is let this model run over all sequences in the test superset and we will submit this directly without any modifications. This will give us a floor if we use this as an "arm" in our ensemble. The floor is: DeepGO-SE without modifications will be at least _X_ good and the ensemble should not get worse than _X_ if we add other arms.
 
 I ran this model over 100 sequences and it took around 35 seconds. Some napkin math tells us that - because we have roughly 240k protein sequences, that the whole generation will take around 24 hours. So I split the test set into 24 batches, one for every hour and let my PC generate all the sequences over night. I did this to make sure that it wouldn't crash in the middle and then I'd have to start again. 
 
