@@ -3,6 +3,8 @@ import "../styles/global.css";
 import "@fontsource/fira-mono";
 import { ClientRouter } from "astro:transitions";
 import { fade } from "astro:transitions";
+import SpeedInsights from "@vercel/speed-insights/astro";
+import Analytics from "@vercel/analytics/astro";
 ---
 
 <html
@@ -14,6 +16,8 @@ import { fade } from "astro:transitions";
         <meta charset="utf-8" />
         <ClientRouter />
         <slot name="head" />
+        <SpeedInsights />
+        <Analytics />
     </head>
     <slot />
 </html>
