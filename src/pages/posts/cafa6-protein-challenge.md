@@ -397,7 +397,15 @@ I ran this model over 100 sequences and it took around 35 seconds. Some napkin m
 
 Ok so, now we wait and watch our electricity bills and the room temperature rise. We will submit this once it's done.
 
-In the meantime...
+After some time, all the predictions by DeepGO-SE were made and after combining everything, we end up with a ~660 MB `tsv` file. After a bit of digging I found out that they had more GO terms available than we do in this challenge and we "only" have a GO term overlap of 97.5 %, which I don't think matters too much but is worth noting I think.
+
+Ok, submission time. After a few failed attempts (which happened because the file MUST be named `submission.tsv` (???)), the upload went through and it was time to process. A minutes later, the results were in.
+
+$$
+0.222 
+$$
+
+Ok, not bad, but I honestly hoped for more. This paper was accepted to Nature after all, and I'd hoped it'd be at least near $0.3$. But alas. We have our baseline now and are in position 691 in the leaderboard. Time to beat it.
 
 ## Training a Model 
 
@@ -420,3 +428,27 @@ Suppose you have a protein that is 50 amino acids long. You use ESM-C 600M. The 
 3) compute the mean across `axis=0` (also good idea)
 
 Having stored the raw embeddings (with the variable sequence lengths) alongside the mean ones, gives us the option to pursue also option 2). I repeated the process for the `Rostlab/prot_t5_xl_half_uniref50-enc` model (which I will henceforth abbreviate as just `prot_t5`). This process used up some 200GB of disk space. Oof.
+
+Ok, I got the embeddings and the first thing I tried is to just put a MLP on top of those. I'm currently just focusing on the mean-pooled embeddings. I also tried one more approach, which is just to look stuff up. If protein A has functions X,Y, and if protein B is similar to protein A, then usually, protein B has similar functions. To know if a protein is similar to another, we use the embeddings and `faiss` to compute the neighbor prios. The combination of the two is the first model I'll try out.
+
+So, it's time to generate the submission, upload it and wait for a while. After some time, the results are in:
+
+$$
+0.238
+$$
+
+Ok, so we managed to beat the DeepGO-SE only model. Nice. I repeated this process to test the `prot_t5` model (having the same MLP head) but its results were abysmal:
+
+$$
+0.149
+$$
+
+This suggests that the ESM embeddings are simply better. I wanted to give the `prot_t5` model one more chance in an ensemble setting in which I would weigh each logits at 0.5. If the combination of the two leads to a lower performance than the ESM only model, then it's curtains for `prot_t5`.
+
+And after a few hours, the results are in:
+
+$$
+0.210
+$$
+
+This means that the `prot_t5` model is actively hurting our performance. So with a heavy heart, I must part ways with that model and only use ESM-C from now on. That's actually pretty good to know, because it simplifies my code and I don't have to wander a path that leads nowhere. I'd say this was a good use of the scientific method!
