@@ -452,3 +452,12 @@ $$
 $$
 
 This means that the `prot_t5` model is actively hurting our performance. So with a heavy heart, I must part ways with that model and only use ESM-C from now on. That's actually pretty good to know, because it simplifies my code and I don't have to wander a path that leads nowhere. I'd say this was a good use of the scientific method!
+
+Next up was combining our ESM-only model with the DeepGO-SE prediction. I weighted the ESM predictions at $0.7$ and the DeepGO ones at $0.3$. Combined both and submitting has netted us... drumroll...
+
+
+$$
+0.240
+$$
+
+Whoo, a massive $0.002$ increase. Well, I had hoped for more, but at least we are now in position 680/1335.
