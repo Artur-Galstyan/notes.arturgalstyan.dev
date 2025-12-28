@@ -461,3 +461,18 @@ $$
 $$
 
 Whoo, a massive $0.002$ increase. Well, I had hoped for more, but at least we are now in position 680/1335.
+
+![image](../../assets/sevdayslater.jpg)
+
+Ok a few days have passed and I'm currently trying out my 13th iteration. I went through a few ideas, small changes here and there to the hyperparameters, a few more layers here, a few layer norms there and so on. 
+
+I ended up re-implementing the DeepGO-SE paper to JAX, because I figured that it might make sense to retrain the thing on OUR current training set. But I've also added a few more bells and whistles.
+
+The model is currently an ensemble. We have:
+
+- The standard ESM + KNN -> MLP block (which gave us the 0.238 performance)
+- The taxonomy embeddings (new) - basically mapping the OX=... term (e.g. 9606 for "human") into an embedding space and then passing that vector through an MLP
+- Our own DeepGO-SE model which also includes "taxonomy penalty" (I coined this term, not sure if it exists or not); the idea being that our model should be punished for predicting GO terms for species that can't have any of those (e.g. don't predict GO terms related to fungi when the protein in question is of a human)
+- `gelu` instead of `relu` (just experimenting)
+
+For some reason though, my models keep plateauing at ~0.23 and I don't really know why and what it would take to break this barrier. I think it might be time to start up the ol' kaggle scraper to see if the discussions have any insights.
