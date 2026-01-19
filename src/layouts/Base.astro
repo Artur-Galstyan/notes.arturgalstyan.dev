@@ -5,6 +5,7 @@ import { ClientRouter } from "astro:transitions";
 import { fade } from "astro:transitions";
 import SpeedInsights from "@vercel/speed-insights/astro";
 import Analytics from "@vercel/analytics/astro";
+import PostHog from "../components/posthog.astro";
 ---
 
 <html
@@ -18,6 +19,7 @@ import Analytics from "@vercel/analytics/astro";
         <slot name="head" />
         <SpeedInsights />
         <Analytics />
+        <PostHog />
     </head>
     <slot />
 </html>
