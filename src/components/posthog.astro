@@ -64,10 +64,11 @@
         })(document, window.posthog || []);
 
         posthog.init("phc_1P0GCzcExrUKjTkwGnQNAarwwvtN46gT2f6y0djtKgW", {
-            api_host: "https://eu.i.posthog.com",
+            ui_host: "https://eu.posthog.com",
             defaults: "2025-11-30",
             capture_pageview: "history_change",
             cookieless_mode: "on_reject",
+            api_host: "/myhogwarts",
         });
     }
 </script>
