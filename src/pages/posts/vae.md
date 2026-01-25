@@ -108,7 +108,7 @@ The redder areas indicate a higher probability. If you were interested in the pr
 $$
   \begin{align*}
   p(x=5) &= \sum_{i=1}^6 p(x=5, z=i)
-  p(x=5) &= \sum_{i=1}^6 p(x=5|z=i) p(z=i)
+  p(x=5) &= \sum_{i=1}^{6} p(x=5|z=i)p(z=i)
   \end{align*}
 $$
 
