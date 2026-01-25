@@ -1,7 +1,8 @@
 ---
 layout: ../../layouts/PostLayout.astro
-title: Kaggle Competition CAFA 6 - Protein Function Prediction (DRAFT)
+title: Kaggle Competition CAFA 6 - Protein Function Prediction
 date: 2025-12-22
+github: https://github.com/Artur-Galstyan/cafa6
 ---
 
 One afternoon, I was very bored and browsed through Kaggle competitions, unsure as to why because I don't actually participate in Kaggle competitions. But there I spotted the CAFA 6 challenge in which you have to predict functions of proteins. 
@@ -389,94 +390,39 @@ The axiom loss is computed based on the output of the `GOTermModel`. They loop o
 
 Lastly, they train N different versions of this with different initial values. Each of those is "valid" and the more models say that a protein falls into a particular ball, the more likely it is that it is true.
 
-This is actually pretty cool and we could train our own version of this another day, but for now, we will just use this.
+Ok so I went ahead and implemented this model. And the current best performance is: $0.332$. 
 
-The first thing we will do is let this model run over all sequences in the test superset and we will submit this directly without any modifications. This will give us a floor if we use this as an "arm" in our ensemble. The floor is: DeepGO-SE without modifications will be at least _X_ good and the ensemble should not get worse than _X_ if we add other arms.
+## A Word on Data
 
-I ran this model over 100 sequences and it took around 35 seconds. Some napkin math tells us that - because we have roughly 240k protein sequences, that the whole generation will take around 24 hours. So I split the test set into 24 batches, one for every hour and let my PC generate all the sequences over night. I did this to make sure that it wouldn't crash in the middle and then I'd have to start again. 
+Not all protein terms are made equal. If you look through the Uniprot database, you will see a column called "evidence code" (or something similar). This tells you _how_ the term was determined. If it was determined experimentally, then that is a very strong signal! This is "good" data. However, many proteins' function is determined algorithmically, often times not experimentally verified. This is "bad" data. We do not want to train on this, because it's as close to noise as it gets in the world of protein function prediction. 
 
-Ok so, now we wait and watch our electricity bills and the room temperature rise. We will submit this once it's done.
+So what I did was to filter out all the data which had a "bad" evidence label attached to it. Turns out, the training set already contained mostly "good" evidence codes already. We managed to get a few more from the test set (which I cross-matched against Uniprot to get the terms).
 
-After some time, all the predictions by DeepGO-SE were made and after combining everything, we end up with a ~660 MB `tsv` file. After a bit of digging I found out that they had more GO terms available than we do in this challenge and we "only" have a GO term overlap of 97.5 %, which I don't think matters too much but is worth noting I think.
+Furthermore, you can use the data in 2 ways:
 
-Ok, submission time. After a few failed attempts (which happened because the file MUST be named `submission.tsv` (???)), the upload went through and it was time to process. A minutes later, the results were in.
+- mean-pooled across the `seq_len` axis (vector shape: `1 x embedding_size`)
+- raw (vector shape: `seq_len x embedding_size`)
 
-$$
-0.222 
-$$
+For the $0.332$ result, I used the mean-pooled version. 
 
-Ok, not bad, but I honestly hoped for more. This paper was accepted to Nature after all, and I'd hoped it'd be at least near $0.3$. But alas. We have our baseline now and are in position 691 in the leaderboard. Time to beat it.
+I also experimented with the raw version and used cross-attention between the embedding size and the latent embedding size of the DeepGO-SE model, but this was unbelievably slow and didn't yield any performance boost. 
 
-## Training a Model 
+## My Best Model (that I lost)
 
-OK. We have some idea about what this challenge is about, we looked through the data and now, I believe, we are ready to create some models. Let's brainstorm a few ideas. 
+In the end, my best model had a performance of $0.342$. I unfortunately changed so much so quickly that I actually don't know where that model is now. 
 
-For one, we have protein sequences. Proteins are 3D objects, but the sequences are 1D strings. Their properties come from their shape! Shape is EVERYTHING in cellular biology. Problem is: we can't just easily infer the shape given the string. We CAN use ESM-Fold or AlphaFold to generate them. But given that I have just 1 underpaid GPU and the challenge is only running for a couple of weeks, this option is not valid. It'd take me months to generate all the structures I'd need and even then it's not guaranteed that I could use them effectively in the model.
+But in terms of architecture, it was an ensemble of 5 arms. The arms that gave the biggest boost were the KNN neighbor searches. Basically, I would get a protein embedding and then find the 6 most similar proteins from my training set and use their terms as reference. 
 
-So instead, we use plan B: embeddings! Luckily, there are a couple of models on the market that can generate rich embedding vecotrs for a given protein sequence. Those embeddings contain lots of information about the protein and they are a helpful shortcut to getting meaningful features out of the protein sequences.
+## My Guesses on the Winning Models
 
-Two encoders I know of are ESM-C 300 (and 600)M and Prot-T5. Both models are available online and you can easily download and use them.
+**Sequence determines structure which determines function.**
 
-So the first thing I did was to compute all the embeddings for all the proteins in the training data. I stored them in `float16` because I need my money for food and have non left for storage.
+I think, in order to get the best model, you will need structural information. At least, THAT would be the most elegant solution.
 
-I also saved them in 2 ways: one where I store them "raw" and another is where I store their "mean" across the sequence length dimension. Here's an example:
+What I found myself in was a situation in which I kept adding more and more arms to my ensemble, but eventually running out of meaningful data sources. There is only so much you can do with just embeddings. And having a Frankenstein's Monster ensemble is not elegant. Using existing proteins as reference is - at least in my oppinion - not the elegant solution. The model should have learned this somehow. 
 
-Suppose you have a protein that is 50 amino acids long. You use ESM-C 600M. The model will output a matrix of shape $50 \times 1154$, where 50 is the sequence length and 1154 is the embedding dimension of ESM-C. Another protein might have a difference sequence length, thus a differently shaped matrix. In JAX land, remember, we MUST NOT HAVE dynamically shaped input matrices. So we have three options:
+One more time: **Sequence determines structure which determines function.**
 
-1) disregard everything and pass dynamic shapes in anyway and cry as your model recompiles for every shape (bad idea)
-2) set a max sequence length and truncate/pad all the proteins (good idea)
-3) compute the mean across `axis=0` (also good idea)
+What I - and probably many others in the challenge - tried was to skip the middle part (the structure part) by simply relying on the ESM embeddings. But those were training in a BERT like fashion (fill in the blanks kind of way). But what you need is the 3d structure as the ultimate guide. 
 
-Having stored the raw embeddings (with the variable sequence lengths) alongside the mean ones, gives us the option to pursue also option 2). I repeated the process for the `Rostlab/prot_t5_xl_half_uniref50-enc` model (which I will henceforth abbreviate as just `prot_t5`). This process used up some 200GB of disk space. Oof.
-
-Ok, I got the embeddings and the first thing I tried is to just put a MLP on top of those. I'm currently just focusing on the mean-pooled embeddings. I also tried one more approach, which is just to look stuff up. If protein A has functions X,Y, and if protein B is similar to protein A, then usually, protein B has similar functions. To know if a protein is similar to another, we use the embeddings and `faiss` to compute the neighbor prios. The combination of the two is the first model I'll try out.
-
-So, it's time to generate the submission, upload it and wait for a while. After some time, the results are in:
-
-$$
-0.238
-$$
-
-Ok, so we managed to beat the DeepGO-SE only model. Nice. I repeated this process to test the `prot_t5` model (having the same MLP head) but its results were abysmal:
-
-$$
-0.149
-$$
-
-This suggests that the ESM embeddings are simply better. I wanted to give the `prot_t5` model one more chance in an ensemble setting in which I would weigh each logits at 0.5. If the combination of the two leads to a lower performance than the ESM only model, then it's curtains for `prot_t5`.
-
-And after a few hours, the results are in:
-
-$$
-0.210
-$$
-
-This means that the `prot_t5` model is actively hurting our performance. So with a heavy heart, I must part ways with that model and only use ESM-C from now on. That's actually pretty good to know, because it simplifies my code and I don't have to wander a path that leads nowhere. I'd say this was a good use of the scientific method!
-
-Next up was combining our ESM-only model with the DeepGO-SE prediction. I weighted the ESM predictions at $0.7$ and the DeepGO ones at $0.3$. Combined both and submitting has netted us... drumroll...
-
-
-$$
-0.240
-$$
-
-Whoo, a massive $0.002$ increase. Well, I had hoped for more, but at least we are now in position 680/1335.
-
-![image](../../assets/sevdayslater.jpg)
-
-Ok a few days have passed and I'm currently trying out my 13th iteration. I went through a few ideas, small changes here and there to the hyperparameters, a few more layers here, a few layer norms there and so on. 
-
-I ended up re-implementing the DeepGO-SE paper to JAX, because I figured that it might make sense to retrain the thing on OUR current training set. But I've also added a few more bells and whistles.
-
-The model is currently an ensemble. We have:
-
-- The standard ESM + KNN -> MLP block 
-- The taxonomy embeddings (new) - basically mapping the OX=... term (e.g. 9606 for "human") into an embedding space and then passing that vector through an MLP
-- Our own DeepGO-SE model which also includes "taxonomy penalty" (I coined this term, not sure if it exists or not); the idea being that our model should be punished for predicting GO terms for species that can't have any of those (e.g. don't predict GO terms related to fungi when the protein in question is of a human)
-- `gelu` instead of `relu` (just experimenting)
-
-For some reason though, my models keep plateauing at ~0.23 and I don't really know why and what it would take to break this barrier. It might be actually the case that I'm reaching the limit of what's possible given the data that I'm actually using. Remember, the DeepGO-SE paper "only" scored 0.220. My ESM+MLP Frankenstein's Monster combo scored 0.238, and DeepGO-SE was a paper in Nature. Given the data that I'm using, there might not be that much more to be had.
-
-I think it might be time to start up the ol' kaggle scraper to see if the discussions have any insights.
-
-And indeed, there are few useful nuggets of information. For one, there is a data leak, which will immediately throw me towards 0.269.
+The winning solution (currently sitting at $0.460$ (?????)) is probably a clever ensemble, like the previous iterations were. I'm really excited to see their results though!

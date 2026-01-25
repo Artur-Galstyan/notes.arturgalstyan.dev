@@ -19,6 +19,7 @@
     "katex": "^0.16.22",
     "rehype-katex": "^7.0.1",
     "remark-math": "^6.0.0",
+    "simple-icons": "^16.6.1",
     "tailwindcss": "^4.1.8"
   },
   "devDependencies": {

@@ -30,20 +30,32 @@ import Base from "../layouts/Base.astro";
             >
                 {Astro.props.frontmatter.title}
             </h1>
+
             {
                 Astro.props.frontmatter.date && (
-                    <time
-                        datetime={Astro.props.frontmatter.date}
-                        class="block text-center text-base-content/60 text-sm md:text-base font-mono"
-                    >
-                        {new Date(
-                            Astro.props.frontmatter.date,
-                        ).toLocaleDateString("en-US", {
-                            year: "numeric",
-                            month: "long",
-                            day: "numeric",
-                        })}
-                    </time>
+                    <div class="flex justify-center">
+                        <time
+                            datetime={Astro.props.frontmatter.date}
+                            class="block text-center text-base-content/60 text-sm md:text-base font-mono "
+                        >
+                            {new Date(
+                                Astro.props.frontmatter.date,
+                            ).toLocaleDateString("en-US", {
+                                year: "numeric",
+                                month: "long",
+                                day: "numeric",
+                            })}
+                        </time>
+                    </div>
+                )
+            }
+            {
+                Astro.props.frontmatter.github && (
+                    <div class="flex justify-center">
+                        <a class="link" href={Astro.props.frontmatter.github}>
+                            Git
+                        </a>
+                    </div>
                 )
             }
         </header>
