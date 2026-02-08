@@ -63,7 +63,7 @@ import Base from "../layouts/Base.astro";
         <!-- Article Content -->
         <main class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
             <article
-                class="prose prose-invert max-w-none prose-lg prose-headings:font-bold prose-a:text-blue-400 prose-a:no-underline hover:prose-a:text-blue-300 prose-pre:bg-base-300/50 prose-pre:border prose-pre:border-base-300/50 prose-code:text-blue-300 prose-img:rounded-xl prose-img:shadow-2xl"
+                class="prose prose-invert max-w-none prose-lg prose-headings:font-bold prose-a:text-blue-400 prose-a:no-underline hover:prose-a:text-blue-300 prose-pre:bg-base-300/50 prose-pre:border prose-pre:border-base-300/50 prose-code:text-blue-300 prose-img:rounded-none prose-img:shadow-2xl"
             >
                 <slot />
             </article>
@@ -76,6 +76,7 @@ import Base from "../layouts/Base.astro";
             </h2>
             <div class="utterances-container">
                 <script
+                    is:inline
                     src="https://utteranc.es/client.js"
                     repo="Artur-Galstyan/notes.arturgalstyan.dev"
                     issue-term="og:title"
