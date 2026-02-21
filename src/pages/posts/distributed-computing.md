@@ -1,9 +1,8 @@
 ---
 layout: ../../layouts/PostLayout.astro
-title: Distributed ML With JAX (DRAFT)
+title: Distributed ML With JAX
 date: 2026-02-08
 ---
-
 
 When it comes to machine learning, one of the "hottest" things is to use as many GPUs as you get your dirty hands on to train ever larger models (that is of course if you are a big company, otherwise it's probably as cold as a [supervoid](https://en.wikipedia.org/wiki/CMB_cold_spot)). 
 
@@ -24,7 +23,7 @@ In other words, it might be a bit overcomplicated for someone just looking for a
 There are 2 ways you can do distributed ML:
 
 - Data Parallelization
-- Model Parellelization
+- Model Parellelization (I will skip this for now)
 
 I write "Parallelization" because that's how it's usually called in other tutorials, but really, you can think of it also as _data replication_ AND _model replication_, i.e. what gets replicated where.
 
