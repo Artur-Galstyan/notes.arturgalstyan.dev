@@ -701,3 +701,317 @@ This model has 22M parameters:
 | **Total** | | **22,095,897** |
 
 We're training this on the smallest data subset (the 10k version) for now to get some data quickly.
+
+
+Avg. loss:
+![image](../../assets/training-protein-encoder/avg_loss.svg)
+
+Learning Rate:
+![image](../../assets/training-protein-encoder/learning_rate.svg)
+
+Masked Token Accuracies:
+![image](../../assets/training-protein-encoder/masked_token_accuracies.svg)
+
+Perplexities:
+![image](../../assets/training-protein-encoder/perplexities.svg)
+
+
+For reference, the ESM-C 600M model has a masked token accuracy of around 0.385 and perplexity of around 8.5. But as I said before, the most important metric for encoders is how they perform in downstream tasks.
+
+
+Speaking of which...
+
+
+### Downstream Tasks
+
+The standard downstream evaluation tasks are:
+- FLIP (Fitness Landscape Inference for Proteins)
+- PEER (Protein sEquence undERstanding) -- you just gotta love the arbitrary acronyms 
+
+We will keep adding more and more downstream tasks, but we have to start with something. That something will be protein solubility prediction (which falls under PEER). It's going to be one of these black box functions which will grow and become a large monster function eventually, but we don't care about code quality or best practices at this moment. I'll actually have this as a collapsible, because it doesn't matter too much to the overall process.
+
+<details>
+
+```python
+def model_to_device(model, device):
+    arrays, static = eqx.partition(model, eqx.is_array)
+    arrays = jax.device_put(arrays, device)
+    return eqx.combine(arrays, static)
+
+
+def downstream_task_evals(
+    pretrained_model: Model, max_seq_len: int = 256, frozen: bool = True, device=None
+):
+    print(f"Evaluating on downstream tasks. {max_seq_len=}, {frozen=}, {device=}")
+
+    class HFDownstreamDataSource(grain.RandomAccessDataSource):
+        def __init__(self, path: str, keys: list[str]):
+            self.ds = load_from_disk(path)
+            self.keys = keys
+
+        def __len__(self):
+            return len(self.ds)
+
+        def __getitem__(self, record_key):
+            row = self.ds[record_key]
+            data = {key: row[key] for key in self.keys}
+            return json.dumps(data).encode("utf-8")
+
+    def setup_deepsol_data(output_dir="data/deepsol"):
+        from datasets import load_dataset
+
+        if pathlib.Path(f"{output_dir}/train").exists():
+            return
+
+        print("Downloading DeepSol dataset...")
+        ds = load_dataset("AI4Protein/DeepSol")
+
+        def process_row(row):
+            seq = row.get("aa_seq", row.get("sequence", ""))
+            return {
+                "sequence": seq,
+                "length": len(seq),
+                "label": row["label"],
+            }
+
+        ds = ds.map(process_row, remove_columns=ds["train"].column_names)
+
+        ds["train"].save_to_disk(f"{output_dir}/train")
+        ds["test"].save_to_disk(f"{output_dir}/test")
+        print(f"Saved DeepSol to {output_dir}")
+
+    class DownstreamTokenizeMap(grain.MapTransform):
+        max_seq_len: int
+
+        def __init__(self, max_seq_len: int):
+            self.max_seq_len = max_seq_len
+
+        def map(self, element):
+            element = cast(bytes, element)
+            data = json.loads(element.decode("utf-8"))
+
+            sequence = data["sequence"]
+            length = data["length"]
+            label = data["label"]
+
+            sequence = tokenize_sequence(
+                sequence=sequence, length=length, max_seq_len=max_seq_len
+            )
+
+            return np.array(sequence, dtype=np.int32), np.array(label, dtype=np.int32)
+
+    class SequenceClassificationModel(eqx.Module):
+        encoder_model: Model
+        classification_head: eqx.nn.Linear
+        frozen: bool
+
+        def __init__(
+            self,
+            pretrained_model: Model,
+            num_classes: int,
+            key: PRNGKeyArray,
+            frozen: bool = True,
+        ):
+            self.encoder_model = pretrained_model
+            self.classification_head = eqx.nn.Linear(
+                pretrained_model.embedding_size, num_classes, key=key
+            )
+            self.frozen = frozen
+
+        def __call__(
+            self, x: Int[Array, "seq_len"], key: PRNGKeyArray
+        ) -> Float[Array, "num_classes"]:
+            _, embeddings = self.encoder_model(x, key)
+
+            if self.frozen:
+                embeddings = jax.lax.stop_gradient(embeddings)
+
+            pad_mask = x != Tokenizer.PAD_ID
+            mask_expanded = pad_mask[:, None]
+
+            sum_embeddings = jnp.sum(embeddings * mask_expanded, axis=0)
+            sum_mask = jnp.maximum(jnp.sum(mask_expanded, axis=0), 1.0)
+            mean_pooled = sum_embeddings / sum_mask
+
+            return self.classification_head(mean_pooled)
+
+    # 1. Solubility Prediction
+    def eval_solubility_prediction():
+        setup_deepsol_data()
+
+        train_source = HFDownstreamDataSource(
+            "data/deepsol/train", ["sequence", "length", "label"]
+        )
+        test_source = HFDownstreamDataSource(
+            "data/deepsol/test", ["sequence", "length", "label"]
+        )
+
+        batch_size = 128
+        n_epochs = 10
+
+        transformations = [
+            DownstreamTokenizeMap(max_seq_len),
+            grain.Batch(batch_size=batch_size),
+        ]
+
+        train_loader = grain.DataLoader(
+            data_source=train_source,
+            operations=transformations,
+            sampler=grain.IndexSampler(
+                num_records=len(train_source),
+                num_epochs=n_epochs,
+                shard_options=grain.ShardOptions(
+                    shard_index=0, shard_count=1, drop_remainder=True
+                ),
+                shuffle=True,
+                seed=42,
+            ),
+            worker_count=0,
+        )
+
+        val_loader = make_eval_loader(test_source, transformations)
+
+        key = jax.random.key(123)
+        if device is not None:
+            key = jax.device_put(key, device)
+        key, model_key = jax.random.split(key)
+
+        model = SequenceClassificationModel(
+            pretrained_model=pretrained_model,
+            num_classes=2,
+            key=model_key,
+            frozen=frozen,
+        )
+
+        optimizer = optax.adam(learning_rate=1e-3)
+        opt_state = optimizer.init(eqx.filter(model, eqx.is_array))
+
+        def loss_fn(model_state, X, step_key):
+            seqs, labels = X
+            keys = jax.random.split(step_key, len(seqs))
+            logits = eqx.filter_vmap(model_state)(seqs, keys)
+            loss = optax.softmax_cross_entropy_with_integer_labels(logits, labels)
+            return jnp.mean(loss)
+
+        @eqx.filter_jit
+        def step_fn(model_state, X, opt_state_state, step_key):
+            loss, grads = eqx.filter_value_and_grad(loss_fn)(model_state, X, step_key)
+            updates, new_opt_state = optimizer.update(
+                grads, opt_state_state, model_state
+            )
+            new_model = eqx.apply_updates(model_state, updates)
+            return new_model, new_opt_state, loss
+
+        @eqx.filter_jit
+        def eval_step(model_state, X, eval_key):
+            seqs, labels = X
+            keys = jax.random.split(eval_key, len(seqs))
+            logits = eqx.filter_vmap(model_state)(seqs, keys)
+            loss = optax.softmax_cross_entropy_with_integer_labels(logits, labels)
+            preds = jnp.argmax(logits, axis=-1)
+            accuracy = jnp.mean(preds == labels)
+            return jnp.mean(loss), accuracy
+
+        batches_per_epoch = len(train_source) // batch_size
+        current_epoch = 0
+        avg_loss = 0.0
+
+        run_name = "DeepSol_Frozen" if frozen else "DeepSol_Finetuned"
+
+        with mlflow.start_run(nested=True, run_name=run_name):
+            mlflow.log_param("downstream_task", "DeepSol")
+            mlflow.log_param("frozen", frozen)
+
+            for i, batch in tqdm(
+                enumerate(train_loader), total=batches_per_epoch * n_epochs
+            ):
+                if device is not None:
+                    batch = jax.device_put(batch, device)
+                epoch = i // batches_per_epoch
+                key, subkey = jax.random.split(key)
+
+                model, opt_state, loss = step_fn(model, batch, opt_state, subkey)
+                avg_loss += loss.item()
+
+                if epoch > current_epoch:
+                    current_epoch = epoch
+                    avg_loss /= batches_per_epoch
+
+                    val_losses = []
+                    val_accs = []
+                    for val_batch in val_loader:
+                        if device is not None:
+                            val_batch = jax.device_put(val_batch, device)
+                        key, subkey = jax.random.split(key)
+                        v_loss, v_acc = eval_step(model, val_batch, subkey)
+                        val_losses.append(v_loss.item())
+                        val_accs.append(v_acc.item())
+
+                    val_loss = float(np.mean(val_losses))
+                    val_acc = float(np.mean(val_accs))
+
+                    print(
+                        f"Epoch {epoch} - Train Loss: {avg_loss:.4f} | Val Loss: {val_loss:.4f} | Val Acc: {val_acc:.4f}"
+                    )
+
+                    mlflow.log_metrics(
+                        {
+                            "deepsol_train_loss": avg_loss,
+                            "deepsol_val_loss": val_loss,
+                            "deepsol_val_acc": val_acc,
+                        },
+                        step=epoch,
+                    )
+
+                    avg_loss = 0.0
+
+    eval_solubility_prediction()
+```
+
+<summary>Downstream Evaluation</summary>
+
+</details>
+
+A quick tl;dr is that we want to test in two settings: one where we finetune the encoder and one where the weights are frozen. Luckily, we have 2 GPUs, so we can assign both these settings to them. 
+
+```python
+    gpu0 = jax.devices("gpu")[0]
+    gpu1 = jax.devices("gpu")[1]
+
+    t1 = threading.Thread(
+        target=downstream_task_evals,
+        kwargs=dict(
+            pretrained_model=model_to_device(model, gpu0),
+            max_seq_len=max_seq_len,
+            frozen=True,
+            device=gpu0,
+        ),
+    )
+    t2 = threading.Thread(
+        target=downstream_task_evals,
+        kwargs=dict(
+            pretrained_model=model_to_device(model, gpu1),
+            max_seq_len=max_seq_len,
+            frozen=False,
+            device=gpu1,
+        ),
+    )
+
+    t1.start()
+    t2.start()
+    t1.join()
+```
+
+We'll have to benchmark this against ESMC later too. And we have like 7 years of LLM / pLM research to apply here. 'Tis gonna be tough, but we will succeed. This is a complete sidetrack, but whenever I'm working on something which is (moderately) above my technical capabilities at the moment, I think back to this scene from HxH and get some motivation:
+
+<details>
+
+![image](../../assets/training-protein-encoder/hxh1.png)
+![image](../../assets/training-protein-encoder/hxh2.png)
+![image](../../assets/training-protein-encoder/hxh3.png)
+
+So cool!
+
+<summary> One of my favorite scenes </summary>
+
+</details>
