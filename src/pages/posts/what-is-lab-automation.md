@@ -27,3 +27,55 @@ By eyeballing these two images - and currently being pretty oblivious about labs
 There is no shortage of resources on the internet on this topic and you could probably fill a whole book on this, but I only have 3 months time. The 80-20 rule must be used here. We can look at [this](https://en.wikipedia.org/wiki/Category:Laboratory_equipment) Wikipedia page to get an overview but another good resource is any site that sells lab equipment (which also teaches you about what brands are out there). 
 
 As humans, we like to categorise and put things neatly in boxes and that's what I will try to do here. I think in general you can split up lab equipment into two broad categories: (expensive as heck) electrical devices (think _oven, liquid dispencers, etc._) and single-use (-ish), generic tools (like IDK a pair of scissors or a [well](https://images.squarespace-cdn.com/content/v1/6435c4ef83064334cafe1395/8d78eb4a-1987-4184-a8cb-27c32872d932/irish-life-sciences_1.0ml-96-square-wells-low-profile-1r96-307ulp-bottom_1S96-016ULPjpg.jpeg)). The former is most interesting to us, but we shouldn't neglect the latter either. For now, we will focus on these electrical devices and if we have some time towards the end, also look at the most common instruments of the latter category.
+
+## Frequently Used Lab Equipment
+
+(Disclaimer: I have never worked in a lab! This list is just what I gathered from my research on the internets!)
+
+Ok, so a lot of the work in a lab is just __moving__ liquids. Be it within the machine itself (e.g. shaking the liquid, spinning the liquid, etc.) or distributing the liquid into separate wells. 
+
+### Pipettes
+
+We start simple, with a relatively cheap, but probably very often used device: a pipette!
+
+![Pipette From Gilson!](../../assets/labequipment/gilsonpipette.webp) ![Pipette From Eppendorf!](../../assets/labequipment/eppendorfpipette.webp)
+
+By "relatively cheap" I mean in relation to the other devices we will see later in this list. Each of these bad boys can set you back between 100€ and 350€! From what I can tell, the Eppendorf brand appears a lot and seems rather expensive; I can't speak for the quality yet but so far they seem to be a bit like the "Apple" in lab equipment. Fun fact: __Eppendorf__ is the name of a district in Hamburg and as a student I used to live there. Another fun fact: just like the lab equipment, Eppendorf is one of the more beautiful (and expensive) areas to live in Hamburg.
+
+### Shake It Up!
+
+Shaking liquid is also common practice in a lab. I'm not 100% sure why, but the analogy I have in my head is that of juice (or oat milk, same idea). The juice particles sink towards the bottom and settle there (they are the suspended solids). Drinking unshaked juice tastes bland (you're basically just drinking fruit-water without the fruit mixed in). After shaking it, the fruity-bits and the water have mixed and your juice tastes jucier. I'm not exactly sure what the right counterparts in a biotech lab are for this analogy, let me just quickly ask Dr. Claude...
+
+Aaaand here is the response: The above section - while true - is not actually the main reason for shaking. What I described earlier is about __homogeneity__, but the main reason is for __aeration__. AFAICT, cells need to "breathe" oxygen. Air-y water only exists on the surface at the boundary between liquid and, well, the air. If you shake the liquid, the surface gets renewed (air-y liquid from the surface mixes into the water, non-air-y water moves to the surface, absorbs a bit of oxygen, moves away, and so on) providing the cells with oxygen there and not making them suffocation to death. Otherwise, growth of the cells would mostly be concentrated near the surface and thus be limited. 
+
+Here's an image I drew that may (or may not) help your understanding:
+
+
+![Shaker Explanation!](../../assets/shaker_explanation.png)
+
+
+My analogy above is also still valid: by shaking the liquid, instead of having one dense sludge of cells at the bottom, they are evenly distributed in the liquid such all cells kind of see the same particles (and nutritients) around them. 
+
+(Shaking is also used for speeding up reactions and dissolving/resuspending)
+
+Let's start with an orbital shaker:
+
+![Solaris Orbital Shaker!](../../assets/labequipment/solarisorbitalshaker.png)
+
+This unit will set you back around 4000€. Yes. You saw that right. [Here's](https://www.youtube.com/watch?v=Y1YMsl6fDOI) a video that shows you what it does. It literally just shakes the platform in a circular fashion. Why it costs so much is beyond me.
+
+Another way to shake liquids is to use a _vortexer_. A vortexer kind of just _wiggles_ its plate around and is often used for suspension (e.g. of cells). Think back to our juice and the juice particles that have settled at the bottom. If you were to wiggle the plate on top of which it stands, then the juice particles fly into the  liquid and _suspend_ "midliquid" and fly around there. Here's one from the "Biologix" brand: 
+
+![Vortexer!](../../assets/labequipment/vortexer.png)
+
+(Btw. nothing here is affiliated in ANY way, I just try to find out some of the common brand names as well)
+
+You can also often find something called a shaking incubator. The shaking part we already covered, so what's an incubator? Well it's just an enclosed container that keeps a set of parameteres constant (mostly temperature). So a shaking incubator is an orbital shaker that ensures a constant temparature. Here's one from Eppendorf:
+
+![Vortexer!](../../assets/labequipment/eppendorfshakingincubator.png)
+
+They can also look a bit like a microwave:
+
+![Vortexer!](../../assets/labequipment/eppendorfshakingincubator2.png)
+
+The latter one sets you back around 23000€, equipment so expensive, you can start to use scientific notation ($2.3e4$).

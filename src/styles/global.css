@@ -58,6 +58,24 @@ img {
     @apply rounded-xl my-8 mx-auto;
 }
 
+/* Multiple images in one paragraph render side by side */
+article p:has(img + img) {
+    @apply flex flex-wrap items-start justify-center gap-2;
+}
+
+article p:has(img + img) img {
+    @apply my-4 mx-0 w-1/4 object-contain;
+}
+
+/* Multiple images in one paragraph render side by side */
+article p:has(img + img) {
+    @apply flex flex-wrap items-start justify-center gap-2;
+}
+
+article p:has(img + img) img {
+    @apply my-4 mx-0 w-1/4 object-contain;
+}
+
 /* Blockquotes */
 article blockquote {
     @apply border-l-4 border-blue-500/50 pl-6 py-2 my-6 italic text-base-content/80 bg-base-200/30 rounded-r-lg;
