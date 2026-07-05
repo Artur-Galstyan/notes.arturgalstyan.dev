@@ -8,7 +8,7 @@ date: 2026-06-20
 
 Sooo, it finally happened! I recently landed a new job at Roche in Basel, Switzerland and this new role I'm assuming is that of a _Lab Automation Engineer_ (LAE). This is extremely exciting and it finally lets me break free from pure fullstack development into a more challenging domain. Not to mention the fact that it's a new country I'm moving to, that is roughly a thousand kilometers away from home, which just hypes me up even more. Needless to say, I'm counting the days until I get started (which is ~3 months as of writing this).
 
-In university I was overly eager to start learning about my classes before the semester even began (to give me an edge) and it seems as if I still carry this property even after graduating 5 years later. Currently, the issue is that although I would say that I'm a pretty good generalist builder, I'm certainly lacking domain expertise in the pharma industry. But I still have 3 months to prepare, so better get started.
+In university I was overly eager to start learning about my classes before the semester even began and it seems as if I still carry this property even after graduating 5 years later. Currently, the issue is that although I would say that I'm a pretty good generalist builder, I'm certainly lacking domain expertise in the pharma industry. But I still have 3 months to prepare, so better get started.
 
 Naturally, one of the first questions one might have is: what the heck even _is_ a lab automation engineer? Let's find out.
 
@@ -22,7 +22,7 @@ Now *that* is a lab if I ever saw one. Scrolling down a bit, we can see a YouTub
 
 ![Lab!](../../assets/lab-fraunhofer_compressed.png)
 
-By eyeballing these two images - and currently being pretty oblivious about labs in general - I would say that the first image _seems_ to be _more_ automated than the second one. But that is not really the point right now. What is interesting is what kind of devices we can spot in these images and then ask ourselves, what other devices can we usually find in labs. Each of them has a special purpose, usually doing _something_ to e.g. some liquid. 
+By eyeballing these two images - and currently being pretty oblivious about labs in general - I would say that the first image _seems_ to be _more_ automated than the second one. But that is not really the point right now. What is interesting is what kind of devices we can spot in these images and then ask ourselves, what other devices can we usually find in labs. Each of them has a special purpose, usually doing _something_ to some liquid. 
 
 There is no shortage of resources on the internet on this topic and you could probably fill a whole book on this, but I only have 3 months time. The 80-20 rule must be used here. We can look at [this](https://en.wikipedia.org/wiki/Category:Laboratory_equipment) Wikipedia page to get an overview but another good resource is any site that sells lab equipment (which also teaches you about what brands are out there). 
 
@@ -79,3 +79,24 @@ They can also look a bit like a microwave:
 ![Vortexer!](../../assets/labequipment/eppendorfshakingincubator2.png)
 
 The latter one sets you back around 23000€, equipment so expensive, you can start to use scientific notation ($2.3e4$).
+
+
+### Centrifuges
+
+A centrifuge is a device that simply spins _something_ and that _something_ then experiences centrifugal forces. I'm sure most of us have been on a merry-go-round. On those, you can feel the centrifugal forces that push you out. Here's an image: 
+
+![Merry Go Round!](../../assets/labequipment/merrygoround.png)
+
+If you have the misfortune to ride these death traps, you will have experienced it too. They say astronauts can withstand who-knows-how-many-gs but the final NASA test is to last in these for longer than 3 minutes. 
+
+![Death Traps!](../../assets/labequipment/kaffeetassen.png)
+
+<div class="text-xs">Man do I hate these spinning teacups, why do they exist? Who rode those things and said "ah yes, a splendid idea"???</div>
+
+When you have some proteins floating around in a liquid, then gravity is not enough to overcome the Brownian motion. You also don't really inspect individual proteins: in biology everything is so small that it moves towards statistics instead. You want _most_ of your proteins to be at the bottom and hopefully _most_ of those are the proteins that you were actually looking for. You also can't really "look" at a protein anyway. After you've moved most of the proteins towards the bottom of your container (which is what the centrifuges do), you can extract those, do some purification process and then perform _mass spectrometry_ so you can be _mostly certain_ about what protein you were working with. 
+
+Here is a (chilled) centrifuge from Beckman Coulter:
+
+![Centrifuge!](../../assets/labequipment/centrifuge.png)
+
+I couldn't find the exact price for this (you have to request a quote), but it's probably ~6000€.
