@@ -80,6 +80,7 @@ They can also look a bit like a microwave:
 
 The latter one sets you back around 23000€, equipment so expensive, you can start to use scientific notation ($2.3e4$).
 
+Often times, you want to grow cells to test whatever drug or compound you're developing. But cells don't just grow under any condition. They need a specific environment which stays constant, e.g. with a constant temperature or humidity. E.g. if you're growing human cells, you should make their environment close to our bodies, i.e. at a constant ~37°C. 
 
 ### Centrifuges
 
@@ -93,10 +94,20 @@ If you have the misfortune to ride these death traps, you will have experienced 
 
 <div class="text-xs">Man do I hate these spinning teacups, why do they exist? Who rode those things and said "ah yes, a splendid idea"???</div>
 
-When you have some proteins floating around in a liquid, then gravity is not enough to overcome the Brownian motion. You also don't really inspect individual proteins: in biology everything is so small that it moves towards statistics instead. You want _most_ of your proteins to be at the bottom and hopefully _most_ of those are the proteins that you were actually looking for. You also can't really "look" at a protein anyway. After you've moved most of the proteins towards the bottom of your container (which is what the centrifuges do), you can extract those, do some purification process and then perform _mass spectrometry_ so you can be _mostly certain_ about what protein you were working with. 
+When you have some proteins floating around in a liquid, then gravity is not enough to overcome the Brownian motion. You also don't really inspect individual proteins: in biology everything is so small that it moves towards statistics instead. You want _most_ of your proteins to be at the bottom and hopefully _most_ of those are the proteins that you were actually looking for. You also can't really "look" at a protein anyway (they are smaller than the spectrum of visible light). After you've moved most of the proteins towards the bottom of your container (which is what the centrifuges do), you can extract those, do some purification process and then perform _mass spectrometry_ so you can be _mostly certain_ about what protein you were working with. 
 
 Here is a (chilled) centrifuge from Beckman Coulter:
 
 ![Centrifuge!](../../assets/labequipment/centrifuge.png)
 
 I couldn't find the exact price for this (you have to request a quote), but it's probably ~6000€.
+
+### ~Nuclear~ Bioreactor
+
+We had already mentioned incubators. They control the environment of a closed off room, e.g. by holding a certain constant temperature. A bioreactor is related to that but instead of controlling the environment, it controls the culture. So there is a bunch of cells in your reactor and you want to control their "state". To do that, you have a few probes that read out metrics like pH, oxygen, nutrients, etc. This is something you might want to do in order to e.g. force the cells to produce a certain protein, something they might only do under the right circumstances. The bioreactor is basically what achieves and maintains that state. 
+
+From the software point of view, a bioreactor is a constant stream of data that you have to log, understand and finally react to. 
+
+![Bioreactor!](../../assets/labequipment/bioreactor.png)
+
+These can get *very* expensive and for the top tier ones, scientific notation starts to make sense unironically. The one above costs around 18.000€, which is on the cheaper side from what I could find.
