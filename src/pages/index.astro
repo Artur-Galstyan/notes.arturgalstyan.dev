@@ -1,7 +1,7 @@
 ---
 import Layout from "../layouts/Layout.astro";
 
-const posts = Object.values(import.meta.glob("./posts/*.md", { eager: true }));
+const posts = Object.values(import.meta.glob(["./posts/*.md", "!./posts/_*.md"], { eager: true }));
 
 const sortedPosts = posts.sort(
     (a: any, b: any) =>

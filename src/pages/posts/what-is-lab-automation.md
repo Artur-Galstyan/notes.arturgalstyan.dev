@@ -6,6 +6,8 @@ date: 2026-06-20
 
 # Context
 
+**Disclaimer: Everything here comes from my own research on the internet and is publicly available. This is just the blog of a future employee who can't wait to start and got a head start on preparing.**
+
 Sooo, it finally happened! I recently landed a new job at Roche in Basel, Switzerland and this new role I'm assuming is that of a _Lab Automation Engineer_ (LAE). This is extremely exciting and it finally lets me break free from pure fullstack development into a more challenging domain. Not to mention the fact that it's a new country I'm moving to, that is roughly a thousand kilometers away from home, which just hypes me up even more. Needless to say, I'm counting the days until I get started (which is ~3 months as of writing this).
 
 In university I was overly eager to start learning about my classes before the semester even began and it seems as if I still carry this property even after graduating 5 years later. Currently, the issue is that although I would say that I'm a pretty good generalist builder, I'm certainly lacking domain expertise in the pharma industry. But I still have 3 months to prepare, so better get started.
