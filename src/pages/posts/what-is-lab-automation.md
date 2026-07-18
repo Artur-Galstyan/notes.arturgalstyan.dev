@@ -111,3 +111,15 @@ From the software point of view, a bioreactor is a constant stream of data that 
 ![Bioreactor!](../../assets/labequipment/bioreactor.png)
 
 These can get *very* expensive and for the top tier ones, scientific notation starts to make sense unironically. The one above costs around 18.000€, which is on the cheaper side from what I could find.
+
+# What does a LAE do now?
+
+Ok, so we already talked quite a bit about the hardware side of lab equipment, but (at least AFAICT) most of my job - in the beginning - will revolve around the software side of things, so its worth looking into that.
+
+When it comes to lab equipment, they are pre-loaded with a lot of special software from the vendors, already able to _do_ things, perform certain actions that are generic enough for the vendor to put into the software. But what if you want to do something differently? 
+
+Let's think of an example. Say you have a microscope from Mega Microscopes Inc. You look at some cells and then take a photo. By default, the device uploads it to the Mega Microscope Cloud. From there, you download them and pass them e.g. to some ML model, which outputs the probability of what kind of cell you're dealing with. (I know this is pretty contrived but bear with me (or actually it might not be, I haven't started yet, so something like this might actually happen)). The issue is the middle step, which is that you have to go to the cloud to download it (of course you could work around that, build a proxy, API this, post request that yada yada but that's not the point). Ideally, you'd just want the microscope to directly forward that image to your ML model, which means that you have to _change the microscopes default behaviour_.
+
+There are 2 ways to do that: call the vendor, pay them a lot of money and let them do it. Or do it yourself. That's where a LAE comes into play. Ideally, the LAE has already talked with the scientists (communication, clear understand of what is needed to be done is very important here!) and then writes software to do what the scientists actually need. In this case, you'd have to somehow *tap into the microscrope* and do *something*.
+
+But how?
