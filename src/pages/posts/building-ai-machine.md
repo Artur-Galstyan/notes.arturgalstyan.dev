@@ -48,3 +48,8 @@ Unless computation time >> communication time is true, having 2 GPUs is slower t
 By the way, here is my beauty, which I named "Talon":
 
 ![image](../../assets/talon.webp)
+
+
+## It's for sale!
+
+If you want to buy this PC, shoot me an email at mailto:artur@arturgalstyan.dev with an offer!
