@@ -125,3 +125,33 @@ Let's think of an example. Say you have a microscope from Mega Microscopes Inc. 
 There are 2 ways to do that: call the vendor, pay them a lot of money and let them do it. Or do it yourself. That's where a LAE comes into play. Ideally, the LAE has already talked with the scientists (communication, clear understand of what is needed to be done is very important here!) and then writes software to do what the scientists actually need. In this case, you'd have to somehow *tap into the microscrope* and do *something*.
 
 But how?
+
+## The Software Landscape
+
+Before we can get into the software landscape, we have to visualise a few layers. These are:
+
+1. Device Layer: How do you talk *to* the device? (E.g. USB, Ethernet, *SiLa2* (VERY IMPORTANT))
+2. Abstraction Layer: How do you abstract the device? (E.g. **PyLabRobot** (ALSO VERY IMPORTANT))
+3. Orchestration Layer: How do you schedule the whole thing?
+4. Information Layer: How do you store and retrieve information? (E.g. **Benchling**)
+
+
+Although I might be wrong, I think - with my current knowledge - that a LAE works across all of these layers. So it makes sense to cover them. Let's start with the Device Layer.
+
+### Device Layer
+
+The Device Layer is the lowest layer and is responsible for talking to the device. There are multiple ways to talk to the device, like USB, Ethernet, and especially *SiLa2*. I keep mentioning this, but haven't really explained what it is yet. But before I do that, we first have to take a detour. Let me tell you a story about **PROTOBUF**.
+
+#### Protobuf
+
+Protobuf is probably for you one of these terms that you keep hearing about but don't really know what it is. Kind of like Docker in the 2015s until you actually sat down and interacted with it. In the most simplest explanation, Protobuf is a way to generate code from a schema and use it to serialize and deserialize data (at the byte level!).
+
+Imagine writing an interface in Java, then running some Java binary, which then generates code for any language just by reading the interface file. This is what Protobuf does for you. Here's an example:
+
+```proto
+syntax = "proto3";
+
+message Greeting {
+    string message = 1;
+}
+```
