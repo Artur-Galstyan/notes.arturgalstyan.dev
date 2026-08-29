@@ -173,4 +173,263 @@ pub struct Greeting {
 }
 ```
 
-Pretty nifty, eh?
+Pretty nifty, eh? But what do we actually do with this now? Well, we can instantiate a struct of this type and serialise and deserialise it. E.g. like this
+
+```rust
+use prost::Message;
+
+pub mod intro {
+    include!(concat!(env!("OUT_DIR"), "/intro.v1.rs"));
+}
+
+fn main() {
+    let g = intro::Greeting {
+        name: "shaker".to_string(),
+        times: 3,
+        message: "Hello, World!".to_string(),
+    };
+    println!(r#"{g:?}{}{}{}"#, g.name, g.times, g.message);
+
+    let bytes = g.encode_to_vec();
+    println!("encoded bytes: {:?}", bytes);
+
+    let back = intro::Greeting::decode(bytes.as_slice()).unwrap();
+    println!("decoded: {:?}", back);
+}
+```
+
+If we run this code, we get this
+
+```
+Greeting { name: "shaker", times: 3, message: "Hello, World!" }shaker3Hello, World!
+encoded bytes: [10, 6, 115, 104, 97, 107, 101, 114, 16, 3, 26, 13, 72, 101, 108, 108, 111, 44, 32, 87, 111, 114, 108, 100, 33]
+decoded: Greeting { name: "shaker", times: 3, message: "Hello, World!" }
+```
+
+If we generate the protobuf in Python, we can also use it in a similar fashion:
+
+```python
+from intro.v1 import intro_pb2
+
+
+def main():
+    greeting_msg = intro_pb2.Greeting(name="shaker", times=3, message="Hello, World!")
+
+    print(greeting_msg)
+
+    serialized = greeting_msg.SerializeToString()
+    print(list(serialized))
+
+    deserialized = intro_pb2.Greeting()
+    deserialized.ParseFromString(serialized)
+    print(deserialized)
+
+
+if __name__ == "__main__":
+    main()
+```
+
+Printing this out gives us:
+
+```
+(pyclient) ➜  pyclient python3 greeting_struct_demo.py
+name: "shaker"
+times: 3
+message: "Hello, World!"
+
+[10, 6, 115, 104, 97, 107, 101, 114, 16, 3, 26, 13, 72, 101, 108, 108, 111, 44, 32, 87, 111, 114, 108, 100, 33]
+name: "shaker"
+times: 3
+message: "Hello, World!"
+```
+
+And as you can see, the bytes are 1:1 identical! This is amazing, because we can now use this to guarantee that our projects - even though they are written in different programming languages - actually use exactly the same data.
+
+And just for completeness, if you look at the generated Python code, then it would look something like this:
+
+```python
+# this is just an excerpt 
+
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import message as _message
+from typing import ClassVar as _ClassVar, Optional as _Optional
+
+DESCRIPTOR: _descriptor.FileDescriptor
+
+class Greeting(_message.Message):
+    __slots__ = ("name", "times", "message")
+    NAME_FIELD_NUMBER: _ClassVar[int]
+    TIMES_FIELD_NUMBER: _ClassVar[int]
+    MESSAGE_FIELD_NUMBER: _ClassVar[int]
+    name: str
+    times: int
+    message: str
+    def __init__(self, name: _Optional[str] = ..., times: _Optional[int] = ..., message: _Optional[str] = ...) -> None: ...
+```
+
+Let's go one step further, because `structs` is not the only thing we get from Protobuf, we can also define *services*!
+
+Here's an example:
+
+```proto
+service GreeterService {
+    rpc Greet(GreetRequest) returns (GreetResponse);
+}
+
+message GreetRequest {
+    string name = 1;
+    int32 times = 2;
+}
+
+message GreetResponse {
+    string text = 1;
+}
+```
+
+Services get the `service` keyword and functions inside it are defined as `rpc`s which stands for `remote procedure call`. In this case, our function gets a `GreetRequest` as input and returns a `GreetResponse`. 
+
+You can generate this, but in the end, all you get is (borrowing from Java terminology) an interface or a `trait` (if you are from a Rust background) that needs to be implemented by someone or something. Because without someone to implement the logic, nothing would happen.
+
+This is where introduce the concept of a `server` and a `client` in the context of gRPC. Perhaps this is a good moment to clarify the difference between these two:
+
+*Protobuf*: Handles code generation and data serialisation (using the message types defined in the `.proto` file); in other words, it sits at the _data format_ layer.
+
+*gRPC*: Is a remote procedure call framework; it uses `protobuf` per default. It takes the services defined in the `.proto` files and moves requests and responses over `HTTP/2`. In other words, it sits on the _network layer_.
+
+Ok, so after generating the code for your programming language (in my case, Rust, so for me it's `cargo build --bin grpc-intro` - with `grpc-intro` being the name of my project; ask your LLM to create a custom made tutorial for your specific case, I'm just giving a high level overview, not a detailled tutorial), it's time to implement the service by writing out the `server` bit:
+
+```rust
+use tonic::{Request, Response, Status, transport::Server};
+
+use crate::intro::{
+    GreetRequest, GreetResponse,
+    greeter_service_server::{GreeterService, GreeterServiceServer},
+};
+
+pub mod intro {
+    include!(concat!(env!("OUT_DIR"), "/intro.v1.rs"));
+}
+
+struct MyGreeter;
+
+#[tonic::async_trait]
+impl GreeterService for MyGreeter {
+    async fn greet(&self, req: Request<GreetRequest>) -> Result<Response<GreetResponse>, Status> {
+        let r = req.into_inner();
+        println!("Received request: {:?}", r);
+
+        if r.times > 10 {
+            return Err(Status::invalid_argument("times must be <= 10"));
+        }
+
+        let text = format!("Hi {}", r.name).repeat(r.times as usize);
+        Ok(Response::new(GreetResponse { text }))
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let addr = "127.0.0.1:50051".parse()?;
+    println!("Server listening on {}", addr);
+    Server::builder()
+        .add_service(GreeterServiceServer::new(MyGreeter))
+        .serve(addr)
+        .await?;
+    Ok(())
+}
+```
+We added a special case in which we throw an error if the `times` argument is > 10 (just to see how `gRPC` handles errors).
+
+So now we have a server running. Using the same `.proto` file, we can once again generate the code for our other programming language (in my case Python) and implement a client there.
+
+```bash
+(pyclient) ➜  pyclient python -m grpc_tools.protoc \
+  -I ../proto \
+  --python_out=. \
+  --pyi_out=. \
+  --grpc_python_out=. \
+  ../proto/intro/v1/intro.proto
+```
+
+First, the happy route (times < 10):
+
+```python
+import grpc
+from intro.v1 import intro_pb2, intro_pb2_grpc
+
+channel = grpc.insecure_channel("127.0.0.1:50051")
+stub = intro_pb2_grpc.GreeterServiceStub(channel)
+
+resp: intro_pb2.GreetResponse = stub.Greet(intro_pb2.GreetRequest(name="Artur", times=8))
+print(resp.text)
+```
+
+When we run this code, we notice on our Rust console, that a request came in:
+
+```
+Server listening on 127.0.0.1:50051
+kReceived request: GreetRequest { name: "Artur", times: 8 }
+```
+
+(great formatting)
+
+And on the client side, it says:
+
+
+```
+(pyclient) ➜  pyclient python3 client.py
+Hi ArturHi ArturHi ArturHi ArturHi ArturHi ArturHi ArturHi Artur
+```
+
+Amazing! Let's try to force an error by increasing the `times` argument to be > 10. If we do, we get this:
+
+```
+(pyclient) ➜  pyclient python3 client.py
+Traceback (most recent call last):
+  File "/Users/arturgalstyan/Workspace/learn-labautomation/grpc-intro/pyclient/client.py", line 7, in <module>
+    resp: intro_pb2.GreetResponse = stub.Greet(intro_pb2.GreetRequest(name="Artur", times=11))
+                                    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/arturgalstyan/Workspace/learn-labautomation/grpc-intro/pyclient/.venv/lib/python3.13/site-packages/grpc/_channel.py", line 1168, in __call__
+    return _end_unary_response_blocking(state, call, False, None)
+  File "/Users/arturgalstyan/Workspace/learn-labautomation/grpc-intro/pyclient/.venv/lib/python3.13/site-packages/grpc/_channel.py", line 999, in _end_unary_response_blocking
+    raise _InactiveRpcError(state)  # pytype: disable=not-instantiable
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+grpc._channel._InactiveRpcError: <_InactiveRpcError of RPC that terminated with:
+	status = StatusCode.INVALID_ARGUMENT
+	details = "times must be <= 10"
+	debug_error_string = "INVALID_ARGUMENT:times must be <= 10"
+>
+(pyclient) ➜  pyclient
+```
+
+I don't know about you, but to me this is pretty amazing. Look at the clean error message that we get, we know exactly what went wrong AND get the details from our Rust server. Just wow! 
+
+In this case, of course our client paniced, crashed and burned to the ground. Normally, we would wrap this in a `try`/`except` kind of loop and handle these errors. And the great part is that you can also define the error message types from `.proto` and in your client handle those accordingly. The possibilities are truly endless.
+
+Let's summarise what we learned so far:
+
+- we learned about protobuf and how we can use it to generate messages and interfaces in any programming language
+- we learned about gRPC and how we can implement a server and a client (even in different languages) and have them talk to each other
+- all from a single `.proto` file
+
+### Back to the Device Layer
+
+After this short excursion to `protobuf` and `gRPC`. What does all this have to do with the device layer. Well, there is a standard which sits on top of both these and it is called `SiLA2`, which stands for **Standardization in Lab Automation**. 
+
+So the flow goes like this:
+
+`SiLA2` (provides the `.xsl` rules - we will get to this in a second) -> `.proto` file -> code
+
+To understand this flow though, we need to make another detour into `xsl` but I promise, this one is going to be short!
+
+#### Ugh.. another detour? XSL(T)
+
+An `.xsl` file is an `.xml` file which contains an **XSLT stylesheet**.
+
+An **XSLT stylesheet** (short for eXtensible Stylesheet Language Transformations) defines the rules to translate an `.xml` file into a different file type (in our case, into a `.proto`) file. For example a `<Command>...</Command>` tag in the `xml` file gets translated into a `rpc` in a `.proto` file.
+
+### Back to the Device Layer (ok that really was short)
+
+SiLA2 is what gives us these rules (if you download the files (I will showcase this later), you will find a file called `fdl2proto.xsl` which contains these files). Ok, now you have an `.xml` file (be patient, you will see this soon enough) and using the rules that SiLA defines, we generate a .proto file using a library called `xsltproc` (but you can use any other library, there are others). And now that we have the `.proto` file, we generate the code and implement the server/client. 
+
+And here is one unfortunate fact about the world. **Not every vendor gives you these files / supports SiLA**. And this is a big shame. Because if they did, we as the developers, wouldn't need to have any other layers or need to reverse engineer anything. They would give us the `xml` file (which contains everything this device can do and what functions it has etc.) and we'd just write our software around it, call the device directly, etc. But this is not the case -- yet another reminder that we don't live in a perfect world. Why? Because the vendors bank on you wanting some extra functionality and that you'd HAVE to go to them so they can make more $$$.
