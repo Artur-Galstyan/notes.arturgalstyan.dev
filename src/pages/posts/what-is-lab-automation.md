@@ -1,12 +1,10 @@
 ---
 layout: ../../layouts/PostLayout.astro
-title: What is Lab Automation? (DRAFT)
+title: What is Lab Automation? 
 date: 2026-06-20
 ---
 
 # Context
-
-**Disclaimer: Everything here comes from my own research on the internet and is publicly available. This is just the blog of a future employee who can't wait to start and got a head start on preparing. I've not yet worked in a lab, so if you were looking for some expert opinion or insights, you've come to the wrong place!**
 
 Sooo, it finally happened! I recently landed a new job at Roche in Basel, Switzerland and this new role I'm assuming is that of a _Lab Automation Engineer_ (LAE). This is extremely exciting and it finally lets me break free from pure fullstack development into a more challenging domain. Not to mention the fact that it's a new country I'm moving to, that is roughly a thousand kilometers away from home, which just hypes me up even more. Needless to say, I'm counting the days until I get started (which is ~3 months as of writing this).
 
@@ -433,3 +431,6 @@ An **XSLT stylesheet** (short for eXtensible Stylesheet Language Transformations
 SiLA2 is what gives us these rules (if you download the files (I will showcase this later), you will find a file called `fdl2proto.xsl` which contains these files). Ok, now you have an `.xml` file (be patient, you will see this soon enough) and using the rules that SiLA defines, we generate a .proto file using a library called `xsltproc` (but you can use any other library, there are others). And now that we have the `.proto` file, we generate the code and implement the server/client. 
 
 And here is one unfortunate fact about the world. **Not every vendor gives you these files / supports SiLA**. And this is a big shame. Because if they did, we as the developers, wouldn't need to have any other layers or need to reverse engineer anything. They would give us the `xml` file (which contains everything this device can do and what functions it has etc.) and we'd just write our software around it, call the device directly, etc. But this is not the case -- yet another reminder that we don't live in a perfect world. Why? Because the vendors bank on you wanting some extra functionality and that you'd HAVE to go to them so they can make more $$$.
+
+
+Ok so this post become very very long. I'm actually gonna call it quits here and split it into multiple posts. I'm thinking about making a dedicated protobuf + gRPC + SiLA tutorial.
